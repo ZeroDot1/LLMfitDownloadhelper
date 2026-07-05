@@ -276,13 +276,14 @@ while true; do
     info "Analyzing local hardware and generating matrix …"
 
     # 2. llmfit query with hardware auto-detection and user sorting
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     FIT_ARGS="$(build_fit_args)"
     # shellcheck disable=SC2086
-    MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null || true)"
+    MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" || true)"
 
     if [[ -z "${MODEL_DATA}" ]]; then
         warn "No optimal matrix found. Loading system fit list …"
-        MODEL_DATA="$(llmfit list 2>/dev/null || true)"
+        MODEL_DATA="$(llmfit list 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" || true)"
     fi
 
     if [[ -z "${MODEL_DATA}" ]]; then
