@@ -18,16 +18,17 @@ import sys
 import json
 import subprocess
 import re
+import argparse
 
-def get_compatible_models():
+def get_compatible_models(tag_filter=None):
     mapping = {}
     try:
         # Run llmfit list --json to get all models
         result = subprocess.run(['llmfit', 'list', '--json'], capture_output=True, text=True, check=True)
         models = json.loads(result.stdout)
     except Exception:
-        # If anything fails, return empty dict
-        return {}, {}
+        # If anything fails, return empty set
+        return set()
 
     compatible = set()
     for model in models:
@@ -41,6 +42,28 @@ def get_compatible_models():
         has_ollama_name = ollama_name is not None and ollama_name != ""
         
         if is_native or has_gguf_sources or is_gguf_repo or has_ollama_name:
+            # Check tag filter if active
+            if tag_filter:
+                name_lower = name.lower()
+                use_case_lower = model.get('use_case', '').lower()
+                capabilities = [c.lower() for c in model.get('capabilities', [])]
+                
+                tag_matched = False
+                tf = tag_filter.lower()
+                if tf == 'coding':
+                    tag_matched = 'coder' in name_lower or 'code' in name_lower or 'code' in use_case_lower
+                elif tf == 'vision':
+                    tag_matched = 'vision' in capabilities or 'vision' in use_case_lower or 'vision' in name_lower or '-vl' in name_lower or 'multimodal' in name_lower or 'multimodal' in use_case_lower
+                elif tf == 'reasoning':
+                    tag_matched = 'reasoning' in name_lower or 'reasoning' in use_case_lower or 'thinking' in name_lower or 'r1' in name_lower or 'o1' in name_lower
+                elif tf == 'audio':
+                    tag_matched = 'audio' in capabilities or 'audio' in use_case_lower or 'speech' in name_lower or 'whisper' in name_lower
+                elif tf == 'general' or tf == 'chat':
+                    tag_matched = 'chat' in name_lower or 'instruct' in name_lower or 'general' in use_case_lower or 'instruction' in use_case_lower
+                
+                if not tag_matched:
+                    continue
+
             compatible.add(name)
             # Save mapping
             if has_gguf_sources:
@@ -60,7 +83,11 @@ def get_compatible_models():
     return compatible
 
 def main():
-    compatible = get_compatible_models()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tag', type=str, default=None)
+    args, unknown = parser.parse_known_args()
+
+    compatible = get_compatible_models(tag_filter=args.tag)
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     
     # Read table lines from stdin

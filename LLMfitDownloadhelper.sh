@@ -286,6 +286,47 @@ manage_installed_models() {
 }
 
 # ------------------------------------------------------------------------------
+# Filter by tag (category) helper
+# ------------------------------------------------------------------------------
+LLMFIT_TAG_FILTER=""
+
+select_tag_filter() {
+    while true; do
+        clear
+        echo -e "${BLUE}======================================================================${NC}"
+        echo -e "${BOLD}${CYAN}  Filter Models by Tag / Category${NC}"
+        echo -e "${BLUE}======================================================================${NC}"
+        echo ""
+        local current_tag="${LLMFIT_TAG_FILTER:-None (Show all compatible models)}"
+        echo -e "${BOLD}Current filter:${NC} ${YELLOW}${current_tag}${NC}"
+        echo ""
+        echo -e " [1] Coding          (Code generation, completion, etc.)"
+        echo -e " [2] Vision          (Multimodal, Vision-Language models)"
+        echo -e " [3] Reasoning       (Advanced reasoning, R1, step-by-step)"
+        echo -e " [4] Audio / Speech  (Transcription, audio understanding)"
+        echo -e " [5] General / Chat  (General purpose, instruct models)"
+        echo -e " [6] Clear filter    (Show all compatible models)"
+        echo -e " [7] Return to main menu"
+        echo ""
+        echo -n "Choice [1-7]: "
+        read -r TAG_CHOICE
+        
+        case "${TAG_CHOICE}" in
+            1) LLMFIT_TAG_FILTER="coding" ;;
+            2) LLMFIT_TAG_FILTER="vision" ;;
+            3) LLMFIT_TAG_FILTER="reasoning" ;;
+            4) LLMFIT_TAG_FILTER="audio" ;;
+            5) LLMFIT_TAG_FILTER="general" ;;
+            6) LLMFIT_TAG_FILTER="" ;;
+            7|*) break ;;
+        esac
+        success "Filter set to: ${LLMFIT_TAG_FILTER:-None}"
+        sleep 1
+        break
+    done
+}
+
+# ------------------------------------------------------------------------------
 # Command Line Argument Parsing
 # ------------------------------------------------------------------------------
 PARSE_CLEAN=false
@@ -296,12 +337,20 @@ while [[ $# -gt 0 ]]; do
             PARSE_CLEAN=true
             shift
             ;;
+        -t|--tag)
+            if [[ -z "${2:-}" ]]; then
+                error_exit "Option -t/--tag requires an argument (coding, vision, reasoning, audio, general)."
+            fi
+            LLMFIT_TAG_FILTER="$2"
+            shift 2
+            ;;
         -h|--help)
             echo "LLMfitDownloadhelper v${VERSION}"
             echo "Usage: ./LLMfitDownloadhelper.sh [options]"
             echo ""
             echo "Options:"
             echo "  -c, --clean, --manage   Directly open the installed models manager (Ollama-Aufräumer)"
+            echo "  -t, --tag <tag>         Pre-filter TUI models by tag (coding, vision, reasoning, audio, general)"
             echo "  -h, --help              Show this help message"
             exit 0
             ;;
@@ -387,10 +436,11 @@ while true; do
     echo -e " [7] Grouped by use case"
     echo -e " [8] Grouped by model provider"
     echo -e " [9] Manage installed models"
-    echo -e " [10] Force update model database (all models)"
-    echo -e " [11] Quit"
+    echo -e " [10] Filter by tag / category   (Current: ${LLMFIT_TAG_FILTER:-None})"
+    echo -e " [11] Force update model database (all models)"
+    echo -e " [12] Quit"
     echo ""
-    echo -n "Choice [1-11]: "
+    echo -n "Choice [1-12]: "
     read -r CHOICE
 
     SORT_CRITERIA="score"
@@ -434,10 +484,14 @@ while true; do
             continue
             ;;
         10)
+            select_tag_filter
+            continue
+            ;;
+        11)
             update_database_if_old true
             continue
             ;;
-        11|*)
+        12|*)
             echo -e "\n${YELLOW}Exiting application.${NC}"
             exit 0
             ;;
@@ -449,12 +503,16 @@ while true; do
     # 2. llmfit query with hardware auto-detection and user sorting
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     FIT_ARGS="$(build_fit_args)"
+    FILTER_ARGS=()
+    if [[ -n "${LLMFIT_TAG_FILTER}" ]]; then
+        FILTER_ARGS+=(--tag "${LLMFIT_TAG_FILTER}")
+    fi
     # shellcheck disable=SC2086
-    MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" || true)"
+    MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" "${FILTER_ARGS[@]}" || true)"
 
     if [[ -z "${MODEL_DATA}" ]]; then
         warn "No optimal matrix found. Loading system fit list …"
-        MODEL_DATA="$(llmfit list 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" || true)"
+        MODEL_DATA="$(llmfit list 2>/dev/null | "${SCRIPT_DIR}/filter_compatible.py" "${FILTER_ARGS[@]}" || true)"
     fi
 
     if [[ -z "${MODEL_DATA}" ]]; then
