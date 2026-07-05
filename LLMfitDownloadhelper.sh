@@ -685,8 +685,8 @@ while true; do
 
     # 3. Interactive TUI with fzf — press [b] to go back
     echo ""
-    success "Arrow keys to navigate, [TAB] to select multiple, [ENTER] to download & start"
-    echo -e "  ${BLUE}[b]${NC} back to menu  |  ${BLUE}[ESC]${NC} quit"
+    success "Arrow keys: navigate | [TAB]: select multiple | [ENTER]: download & start"
+    echo -e "  ${BLUE}[Ctrl-S]${NC} cycle sort criteria  |  ${BLUE}[b]${NC} back to menu  |  ${BLUE}[ESC]${NC} quit"
     echo ""
 
     # Sync current sort criteria for Ctrl-S reload action
