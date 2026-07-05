@@ -286,6 +286,37 @@ manage_installed_models() {
 }
 
 # ------------------------------------------------------------------------------
+# Command Line Argument Parsing
+# ------------------------------------------------------------------------------
+PARSE_CLEAN=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -c|--clean|--manage)
+            PARSE_CLEAN=true
+            shift
+            ;;
+        -h|--help)
+            echo "LLMfitDownloadhelper v${VERSION}"
+            echo "Usage: ./LLMfitDownloadhelper.sh [options]"
+            echo ""
+            echo "Options:"
+            echo "  -c, --clean, --manage   Directly open the installed models manager (Ollama-Aufräumer)"
+            echo "  -h, --help              Show this help message"
+            exit 0
+            ;;
+        *)
+            error_exit "Unknown option: $1. Run with -h or --help for usage."
+            ;;
+    esac
+done
+
+if [[ "${PARSE_CLEAN}" == "true" ]]; then
+    manage_installed_models
+    exit 0
+fi
+
+# ------------------------------------------------------------------------------
 # Database update helper (checks cache age or force updates all models)
 # ------------------------------------------------------------------------------
 update_database_if_old() {
