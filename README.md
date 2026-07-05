@@ -48,7 +48,7 @@ Ollama with a single keystroke.
 |---------------------------------|-----------------------------------------------------------------------------|
 | **Universal Hardware Profiling** | Detects CPU, RAM, and GPU (NVIDIA CUDA, AMD ROCm, Apple Silicon) anywhere.  |
 | **Flexible Sorting**            | Sort by any of **8 criteria** — date, context, score, speed, params, memory, use case, or provider. |
-| **Deep Cache Updates**          | Fetches **500+ trending models** from HuggingFace on every launch.          |
+| **Deep Cache Updates**          | Fetches **10,000+ trending models** from HuggingFace, caching updates for 2 hours. |
 | **fzf-Powered Interface**       | Blazing-fast fuzzy search with `[b]` to go back, `[ESC]` to quit.          |
 | **Ollama Integration**          | Extracts clean model identifiers and runs `ollama run` automatically.       |
 | **Model Management**            | List installed models, delete individual models using `fzf`, or delete all. |
@@ -135,8 +135,8 @@ cargo install llmfit
    ```
 
 The script will:
-1. Update the `llmfit` model cache (500+ trending models).
-2. Present a **sorting menu** with **8 criteria** (date, context, score, speed, params, memory, use case, provider) plus a **model manager**.
+1. Check the local cache age and automatically update the `llmfit` model cache (fetching **10,000+ models** from HuggingFace) only if the cache is older than 2 hours.
+2. Present a **sorting menu** with **8 criteria** (date, context, score, speed, params, memory, use case, provider), a **model manager**, and a **force database update** option.
 3. Apply optional filters: `--perfect` (exact hardware match) and `--tool-use` (function-calling models only).
 4. Analyze your hardware and build a compatibility matrix.
 5. Launch an interactive **fzf** search window pre-filtered for Ollama models.
@@ -154,15 +154,16 @@ The script will:
 
 ## How it Works
 
-The script runs in a loop: **Cache → Menu → Fit → fzf → (run model | back to menu | quit)** or **Menu → Model Manager**.
+The script runs in a loop: **Cache Check/Update → Menu → Fit → fzf → (run model | back to menu | quit)**, **Menu → Model Manager**, or **Menu → Force Update DB**.
 
 ```
-  ┌─ Cache Update (once on launch)
+  ┌─ Cache Check & Auto-Update (on launch, if > 2h old)
   │
   ├─ Main Menu ───────────────┐
   │   [1-8] sort              │  back to menu
   │   [9] manage models       │      ▲
-  │   [10] quit               │      │
+  │   [10] force update db    │      │
+  │   [11] quit               │      │
   │        ↓ (if [1-8] chosen)│      │
   │   llmfit fit              │      │
   │        ↓                  │      │
@@ -173,8 +174,7 @@ The script runs in a loop: **Cache → Menu → Fit → fzf → (run model | bac
 ```
 
 1. **Cache Update**  
-   On startup, the script connects to HuggingFace and updates your local `llmfit` cache with
-   **500+ trending models**.
+   On startup, the script checks if the local cache (`~/.llmfit/hf_models_cache.json`) is older than 2 hours. If it is, it automatically updates the cache with **10,000+ models** from HuggingFace. You can also manually trigger a deep update fetching up to **30,000 models** (via choice 10 in the main menu, with a resource warning).
 
 2. **Sorting Choice**  
    You pick how models are sorted — **8 criteria** available:

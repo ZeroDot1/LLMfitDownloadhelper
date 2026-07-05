@@ -21,7 +21,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 VERSION="1.7"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
-LLMFIT_LIMIT="${LLMFIT_LIMIT:-500}"
+LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
 LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
 LLMFIT_TOOL_USE="${LLMFIT_TOOL_USE:-false}"
 LLMFIT_NO_DASHBOARD="${LLMFIT_NO_DASHBOARD:-true}"
@@ -286,6 +286,49 @@ manage_installed_models() {
 }
 
 # ------------------------------------------------------------------------------
+# Database update helper (checks cache age or force updates all models)
+# ------------------------------------------------------------------------------
+update_database_if_old() {
+    local force="${1:-false}"
+    local cache_file="${HOME}/.llmfit/hf_models_cache.json"
+    local now
+    now=$(date +%s)
+    local last_modified=0
+    if [[ -f "${cache_file}" ]]; then
+        last_modified=$(stat -c %Y "${cache_file}" 2>/dev/null || stat -f %m "${cache_file}" 2>/dev/null || echo 0)
+    fi
+    local diff=$(( now - last_modified ))
+    
+    if [[ "${force}" == "true" ]]; then
+        echo -e "${YELLOW}${BOLD}WARNING:${NC} Fetching all models from HuggingFace can take several minutes and consumes significant network/API resources. Please do not run this too frequently."
+        echo -n "Do you want to proceed? [y/N]: "
+        read -r PROCEED
+        if [[ ! "${PROCEED}" =~ ^[yY]$ ]]; then
+            info "Database update cancelled."
+            sleep 1.5
+            return
+        fi
+        info "Force updating database with ALL models (up to 30,000) …"
+        echo -e "${BLUE}----------------------------------------------------------------------${NC}"
+        llmfit update --trending 30000 --downloads 30000 ${GLOBAL_ARGS}
+        echo -e "${BLUE}----------------------------------------------------------------------${NC}"
+        success "Database successfully updated."
+        sleep 2
+    elif [[ ${diff} -ge 7200 ]]; then
+        info "Database cache is older than 2 hours. Updating (limit: ${LLMFIT_LIMIT}) …"
+        echo -e "${BLUE}----------------------------------------------------------------------${NC}"
+        llmfit update --trending "${LLMFIT_LIMIT}" ${GLOBAL_ARGS}
+        echo -e "${BLUE}----------------------------------------------------------------------${NC}"
+        success "Database cache updated."
+        sleep 1.5
+    else
+        local remaining_mins=$(( (7200 - diff) / 60 ))
+        info "Database cache is up-to-date (updated $(( diff / 60 ))m ago). Next auto-update in ${remaining_mins}m."
+        sleep 1
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # Main program
 # ------------------------------------------------------------------------------
 clear
@@ -293,13 +336,10 @@ echo -e "${BLUE}================================================================
 echo -e "${BOLD}${CYAN}  LLMfitDownloadhelper ${NC}v${VERSION} | ${GREEN}Author: ZeroDot1${NC}"
 echo -e "${BLUE}======================================================================${NC}"
 
-# 1. Database update with extended model list (once on launch)
-info "Updating llmfit database (extended model list) …"
-echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 GLOBAL_ARGS="$(build_global_args)"
-# shellcheck disable=SC2086
-llmfit update --trending "${LLMFIT_LIMIT}" ${GLOBAL_ARGS}
-echo -e "${BLUE}----------------------------------------------------------------------${NC}"
+
+# 1. Database update with extended model list (once on launch, if old)
+update_database_if_old false
 echo ""
 
 # ------------------------------------------------------------------------------
@@ -316,9 +356,10 @@ while true; do
     echo -e " [7] Grouped by use case"
     echo -e " [8] Grouped by model provider"
     echo -e " [9] Manage installed models"
-    echo -e " [10] Quit"
+    echo -e " [10] Force update model database (all models)"
+    echo -e " [11] Quit"
     echo ""
-    echo -n "Choice [1-10]: "
+    echo -n "Choice [1-11]: "
     read -r CHOICE
 
     SORT_CRITERIA="score"
@@ -361,7 +402,11 @@ while true; do
             manage_installed_models
             continue
             ;;
-        10|*)
+        10)
+            update_database_if_old true
+            continue
+            ;;
+        11|*)
             echo -e "\n${YELLOW}Exiting application.${NC}"
             exit 0
             ;;
