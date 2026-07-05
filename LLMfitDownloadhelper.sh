@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       2.0
+# Version:       2.1
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -33,7 +33,7 @@ if [[ -n "${HF_TOKEN:-}" ]]; then
     export HF_TOKEN
 fi
 
-VERSION="2.0"
+VERSION="2.1"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
 LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
@@ -87,6 +87,106 @@ view_history_log() {
         --height=70% \
         --layout=reverse < "${log_file}" || true
 }
+
+run_model_with_custom_prompt() {
+    local model_name="$1"
+    local prompts_dir="${HOME}/.llmfit/prompts"
+    mkdir -p "${prompts_dir}"
+    
+    # Seed default prompts if directory is empty
+    if [[ ! -f "${prompts_dir}/Developer.txt" ]]; then
+        echo "You are a professional, senior software developer. Write clean, well-commented, and robust code. Prefer clarity over cleverness." > "${prompts_dir}/Developer.txt"
+        echo "Explain the concepts like I am five years old, using simple language, analogies, and no jargon." > "${prompts_dir}/ELI5.txt"
+        echo "You are a highly precise translator. Translate the user's input accurately into German, maintaining the tone and nuance." > "${prompts_dir}/German_Translator.txt"
+        echo "You are an expert summarizer. Provide concise, bulleted summaries highlighting only key takeaways from the text." > "${prompts_dir}/Summarizer.txt"
+    fi
+    
+    # Prompt user for prompt mode
+    local mode
+    mode=$(echo -e "Default launch (No system prompt)\nLaunch with Custom System Prompt" | fzf \
+        --header="Select execution mode for ${model_name}" \
+        --prompt="Mode > " \
+        --border=rounded \
+        --height=15% \
+        --layout=reverse)
+        
+    if [[ "${mode}" == "Launch with Custom System Prompt" ]]; then
+        local selected_prompt_file
+        selected_prompt_file=$(find "${prompts_dir}" -name "*.txt" -printf "%f\n" | fzf \
+            --header="Select a system prompt template (ESC to cancel)" \
+            --prompt="Select prompt > " \
+            --border=rounded \
+            --height=30% \
+            --layout=reverse)
+            
+        if [[ -n "${selected_prompt_file}" ]]; then
+            local prompt_content
+            prompt_content=$(cat "${prompts_dir}/${selected_prompt_file}")
+            
+            # Sanitize model name for Ollama tag format
+            local safe_model_name
+            safe_model_name=$(echo "${model_name}" | tr '[:upper:]' '[:lower:]' | tr '/' '-' | tr -cd 'a-z0-9.-')
+            local prompt_name_clean
+            prompt_name_clean=$(echo "${selected_prompt_file%.txt}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9.-')
+            local temp_model_tag="ephemeral-${safe_model_name}-${prompt_name_clean}"
+            
+            info "Building ephemeral model ${temp_model_tag} with template ${selected_prompt_file%.txt} …"
+            
+            local temp_modelfile="/tmp/Modelfile-${temp_model_tag}"
+            echo "FROM ${model_name}" > "${temp_modelfile}"
+            # Escape quotes in prompt content
+            local escaped_prompt
+            escaped_prompt=$(echo "${prompt_content}" | sed 's/"/\\"/g')
+            echo "SYSTEM \"${escaped_prompt}\"" >> "${temp_modelfile}"
+            
+            if ollama create "${temp_model_tag}" -f "${temp_modelfile}" &>/dev/null; then
+                success "Ephemeral model built successfully."
+                echo ""
+                
+                local start_time
+                start_time=$(date +%s)
+                local run_status=0
+                ollama run "${temp_model_tag}" || run_status=$?
+                local end_time
+                end_time=$(date +%s)
+                local duration=$((end_time - start_time))
+                
+                if [[ ${run_status} -eq 0 ]]; then
+                    log_history "RUN" "${model_name}" "| Prompt: ${selected_prompt_file%.txt} | Duration: ${duration}s"
+                else
+                    log_history "RUN_FAILED" "${model_name}" "| Prompt: ${selected_prompt_file%.txt} | Exit code: ${run_status} | Duration: ${duration}s"
+                fi
+                
+                info "Cleaning up ephemeral model ${temp_model_tag} …"
+                ollama rm "${temp_model_tag}" &>/dev/null || true
+                rm -f "${temp_modelfile}"
+                return
+            else
+                rm -f "${temp_modelfile}"
+                warn "Failed to build ephemeral model. Falling back to default launch."
+            fi
+        fi
+    fi
+    
+    # Default launch fallback
+    local start_time
+    start_time=$(date +%s)
+    local run_status=0
+    ollama run "${model_name}" || run_status=$?
+    local end_time
+    end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    if [[ ${run_status} -eq 0 ]]; then
+        log_history "RUN" "${model_name}" "| Duration: ${duration}s"
+    else
+        log_history "RUN_FAILED" "${model_name}" "| Exit code: ${run_status} | Duration: ${duration}s"
+        warn "Ollama run exited with error code ${run_status}."
+        echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
+        read -r _
+    fi
+}
+
 
 info() {
     echo -e "${BLUE}::${NC} $*"
@@ -978,22 +1078,7 @@ while true; do
             continue
         fi
 
-        local start_time
-        start_time=$(date +%s)
-        local run_status=0
-        ollama run "${model_names[0]}" || run_status=$?
-        local end_time
-        end_time=$(date +%s)
-        local duration=$((end_time - start_time))
-        
-        if [[ ${run_status} -eq 0 ]]; then
-            log_history "RUN" "${model_names[0]}" "| Duration: ${duration}s"
-        else
-            log_history "RUN_FAILED" "${model_names[0]}" "| Exit code: ${run_status} | Duration: ${duration}s"
-            warn "Ollama run exited with error code ${run_status}."
-            echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
-            read -r _
-        fi
+        run_model_with_custom_prompt "${model_names[0]}"
         continue
     else
         clear
@@ -1029,22 +1114,7 @@ while true; do
             --layout=reverse)
             
         if [[ "${run_choice}" == "Yes, run now" ]]; then
-            local start_time
-            start_time=$(date +%s)
-            local run_status=0
-            ollama run "${model_names[0]}" || run_status=$?
-            local end_time
-            end_time=$(date +%s)
-            local duration=$((end_time - start_time))
-            
-            if [[ ${run_status} -eq 0 ]]; then
-                log_history "RUN" "${model_names[0]}" "| Duration: ${duration}s"
-            else
-                log_history "RUN_FAILED" "${model_names[0]}" "| Exit code: ${run_status} | Duration: ${duration}s"
-                warn "Ollama run exited with error code ${run_status}."
-                echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
-                read -r _
-            fi
+            run_model_with_custom_prompt "${model_names[0]}"
         fi
         continue
     fi

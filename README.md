@@ -267,6 +267,8 @@ You can launch the script with various flags:
 |--------|----------|-------------|
 | `-c`, `--clean`, `--manage` | *None* | Directly open the installed models manager (Ollama-Aufräumer) and exit |
 | `-t`, `--tag` | `coding`, `vision`, `reasoning`, `audio`, `general` | Pre-filter TUI models by tag/category |
+| `-o`, `--offline` | *None* | Run in offline mode (skips updates and database cache verification) |
+| `--show-widget` | *None* | Prints a Zsh/Bash Alt+L shortcut snippet to add to shell configs |
 | `--update` | *None* | Check for updates on GitHub and self-update the script and helpers |
 | `-h`, `--help` | *None* | Show the help message and exit |
 
@@ -279,6 +281,7 @@ The following variables can be set to customize behavior:
 | Variable            | Default                 | Description                                    |
 |---------------------|-------------------------|------------------------------------------------|
 | `OLLAMA_HOST`       | `http://127.0.0.1:11434`| Ollama API endpoint                            |
+| `HF_TOKEN`          | *(unset)*               | HuggingFace Hub token for gated/private models |
 | `LLMFIT_LIMIT`      | `500`                   | Trending models to fetch / max fit results     |
 | `LLMFIT_PERFECT`    | `false`                 | Show only perfectly matching models (`true`)   |
 | `LLMFIT_TOOL_USE`   | `false`                 | Show only function-calling models (`true`)     |
@@ -287,6 +290,7 @@ The following variables can be set to customize behavior:
 | `LLMFIT_RAM`        | *(unset)*               | Override system RAM (e.g. `"64G"`, `"128000M"`)|
 | `LLMFIT_CPU_CORES`  | *(unset)*               | Override detected CPU core count               |
 | `LLMFIT_MAX_CONTEXT`| *(unset)*               | Cap context length for memory estimation (tokens) |
+| `LLMFIT_OFFLINE`    | `false`                 | Enforce offline execution mode (`true`)        |
 
 Example:
 
