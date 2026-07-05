@@ -245,10 +245,15 @@ manage_installed_models() {
                 if [[ -n "${selection}" ]]; then
                     local model_to_delete
                     model_to_delete=$(echo "${selection}" | awk '{print $1}')
-                    echo ""
-                    echo -e "${RED}${BOLD}WARNING:${NC} Are you sure you want to delete ${YELLOW}${model_to_delete}${NC}? [y/N]"
-                    read -r CONFIRM
-                    if [[ "${CONFIRM}" =~ ^[yY]$ ]]; then
+                    local confirm
+                    confirm=$(echo -e "No, cancel deletion\nYes, delete model" | fzf \
+                        --header="WARNING: Are you sure you want to delete ${model_to_delete}?" \
+                        --prompt="Confirm deletion > " \
+                        --border=rounded \
+                        --height=15% \
+                        --layout=reverse)
+                    
+                    if [[ "${confirm}" == "Yes, delete model" ]]; then
                         info "Deleting ${model_to_delete} ..."
                         ollama rm "${model_to_delete}"
                         success "Model deleted successfully."
@@ -260,10 +265,15 @@ manage_installed_models() {
                 fi
                 ;;
             2)
-                echo ""
-                echo -e "${RED}${BOLD}DANGER:${NC} Are you absolutely sure you want to delete ${RED}${BOLD}ALL${NC} installed models? [y/N]"
-                read -r CONFIRM
-                if [[ "${CONFIRM}" =~ ^[yY]$ ]]; then
+                local confirm
+                confirm=$(echo -e "No, keep all models\nYes, delete ALL models" | fzf \
+                    --header="DANGER: Are you absolutely sure you want to delete ALL installed models?" \
+                    --prompt="Confirm wipe > " \
+                    --border=rounded \
+                    --height=15% \
+                    --layout=reverse)
+                
+                if [[ "${confirm}" == "Yes, delete ALL models" ]]; then
                     local model_name
                     echo "${list_output}" | tail -n +2 | awk '{print $1}' | while read -r model_name; do
                         if [[ -n "${model_name}" ]]; then
@@ -333,14 +343,39 @@ self_update() {
     local script_dir
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     
-    # If inside a git work tree, run git pull to update all repository files
+    # If inside a git work tree, check and run git pull to update all repository files
     if git -C "${script_dir}" rev-parse --is-inside-work-tree &>/dev/null; then
-        info "Git repository detected. Updating all files via git pull …"
-        if git -C "${script_dir}" pull; then
-            success "Successfully updated repository via git pull."
-            exit 0
+        info "Checking for remote Git repository updates …"
+        git -C "${script_dir}" fetch &>/dev/null || true
+        
+        local local_hash
+        local_hash=$(git -C "${script_dir}" rev-parse HEAD)
+        local upstream_hash
+        upstream_hash=$(git -C "${script_dir}" rev-parse @{u} 2>/dev/null || echo "")
+        
+        if [[ -n "${upstream_hash}" && "${local_hash}" != "${upstream_hash}" ]]; then
+            local choice
+            choice=$(echo -e "Yes, update now (git pull)\nNo, cancel" | fzf \
+                --header="A new repository update is available. Do you want to update?" \
+                --prompt="Update choice > " \
+                --border=rounded \
+                --height=15% \
+                --layout=reverse)
+            if [[ "${choice}" == "Yes, update now (git pull)" ]]; then
+                info "Updating all files via git pull …"
+                if git -C "${script_dir}" pull; then
+                    success "Successfully updated repository via git pull."
+                    exit 0
+                else
+                    error_exit "Failed to run git pull."
+                fi
+            else
+                info "Update cancelled."
+                exit 0
+            fi
         else
-            error_exit "Failed to run git pull."
+            success "Repository is already up-to-date."
+            exit 0
         fi
     fi
 
@@ -353,26 +388,38 @@ self_update() {
     fi
     
     if [[ "${remote_version}" != "${VERSION}" ]]; then
-        success "New version found: ${remote_version} (Local: ${VERSION})"
-        info "Updating LLMfitDownloadhelper.sh …"
-        local script_path
-        script_path=$(realpath "$0")
+        local choice
+        choice=$(echo -e "Yes, update now\nNo, cancel" | fzf \
+            --header="New version found: ${remote_version} (Local: ${VERSION}). Update now?" \
+            --prompt="Update choice > " \
+            --border=rounded \
+            --height=15% \
+            --layout=reverse)
         
-        # Download new script
-        if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" -o "${script_path}"; then
-            error_exit "Failed to download update."
-        fi
-        
-        # Download new helper script
-        info "Updating filter_compatible.py …"
-        if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/filter_compatible.py" -o "${script_dir}/filter_compatible.py"; then
-            warn "Failed to download filter_compatible.py update."
+        if [[ "${choice}" == "Yes, update now" ]]; then
+            info "Updating LLMfitDownloadhelper.sh …"
+            local script_path
+            script_path=$(realpath "$0")
+            
+            # Download new script
+            if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" -o "${script_path}"; then
+                error_exit "Failed to download update."
+            fi
+            
+            # Download new helper script
+            info "Updating filter_compatible.py …"
+            if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/filter_compatible.py" -o "${script_dir}/filter_compatible.py"; then
+                warn "Failed to download filter_compatible.py update."
+            else
+                chmod +x "${script_dir}/filter_compatible.py"
+            fi
+            
+            success "Successfully updated to version ${remote_version}."
+            exit 0
         else
-            chmod +x "${script_dir}/filter_compatible.py"
+            info "Update cancelled."
+            exit 0
         fi
-        
-        success "Successfully updated to version ${remote_version}."
-        exit 0
     else
         success "LLMfitDownloadhelper is already up-to-date (Version ${VERSION})."
         exit 0
@@ -443,10 +490,15 @@ update_database_if_old() {
     local diff=$(( now - last_modified ))
     
     if [[ "${force}" == "true" ]]; then
-        echo -e "${YELLOW}${BOLD}WARNING:${NC} Fetching all models from HuggingFace can take several minutes and consumes significant network/API resources. Please do not run this too frequently."
-        echo -n "Do you want to proceed? [y/N]: "
-        read -r PROCEED
-        if [[ ! "${PROCEED}" =~ ^[yY]$ ]]; then
+        local confirm
+        confirm=$(echo -e "No, cancel\nYes, update database" | fzf \
+            --header="WARNING: Fetching all models can take several minutes. Proceed?" \
+            --prompt="Confirm force update > " \
+            --border=rounded \
+            --height=15% \
+            --layout=reverse)
+        
+        if [[ "${confirm}" != "Yes, update database" ]]; then
             info "Database update cancelled."
             sleep 1.5
             return
