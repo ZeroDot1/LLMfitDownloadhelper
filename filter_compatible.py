@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       1.8
+# Version:       1.9
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -85,10 +85,44 @@ def get_compatible_models(tag_filter=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tag', type=str, default=None)
+    parser.add_argument('--preview', type=str, default=None)
+    parser.add_argument('--selected', type=str, nargs='*', default=None)
     args, unknown = parser.parse_known_args()
 
-    compatible = get_compatible_models(tag_filter=args.tag)
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+    # Handle preview mode
+    if args.preview is not None:
+        # Extract model names from selected list
+        selected = []
+        if args.selected:
+            for s in args.selected:
+                s_clean = ansi_escape.sub('', s).strip()
+                s_clean = s_clean.replace('│', '').strip()
+                if s_clean and s_clean not in selected and s_clean != "Model" and not s_clean.startswith("---"):
+                    selected.append(s_clean)
+        
+        # If exactly 2 models are selected, run diff comparison
+        if len(selected) == 2:
+            subprocess.run(['llmfit', 'diff', selected[0], selected[1]])
+        elif len(selected) > 2:
+            print("=== Model Comparison ===")
+            print("Please select exactly 2 models to compare.")
+            print(f"Currently selected ({len(selected)}):")
+            for s in selected:
+                print(f" - {s}")
+        else:
+            # Show detailed info for focused model
+            focused = ansi_escape.sub('', args.preview).strip()
+            focused = focused.replace('│', '').strip()
+            if focused and focused != "Model" and not focused.startswith("---"):
+                subprocess.run(['llmfit', 'info', focused])
+            else:
+                print("No model selected.")
+        return
+
+    # Regular filter mode
+    compatible = get_compatible_models(tag_filter=args.tag)
     
     # Read table lines from stdin
     for line in sys.stdin:

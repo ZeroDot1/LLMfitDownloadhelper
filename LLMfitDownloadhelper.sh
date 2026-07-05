@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       1.8
+# Version:       1.9
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -19,7 +19,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # Configuration (all overridable via environment variables)
 # ------------------------------------------------------------------------------
-VERSION="1.8"
+VERSION="1.9"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
 LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
@@ -434,6 +434,51 @@ PARSE_UPDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --next-sort)
+            # Cycle sorting logic
+            local current_sort="score"
+            if [[ -f "/tmp/llmfit_current_sort.txt" ]]; then
+                current_sort=$(cat /tmp/llmfit_current_sort.txt)
+            fi
+            
+            # Determine next sort
+            local next_sort="score"
+            case "${current_sort}" in
+                score) next_sort="tps" ;;
+                tps) next_sort="params" ;;
+                params) next_sort="mem" ;;
+                mem) next_sort="ctx" ;;
+                ctx) next_sort="date" ;;
+                date) next_sort="use" ;;
+                use) next_sort="provider" ;;
+                provider|*) next_sort="score" ;;
+            esac
+            
+            # Save next sort
+            echo "${next_sort}" > /tmp/llmfit_current_sort.txt
+            
+            # Rebuild FIT_ARGS and GLOBAL_ARGS and FILTER_ARGS
+            local fit_args=()
+            if [[ "${LLMFIT_PERFECT}" == "true" ]]; then fit_args+=(--perfect); fi
+            if [[ "${LLMFIT_TOOL_USE}" == "true" ]]; then fit_args+=(--tool-use); fi
+            if [[ -n "${LLMFIT_MEMORY}" ]]; then fit_args+=(--memory "${LLMFIT_MEMORY}"); fi
+            if [[ -n "${LLMFIT_RAM}" ]]; then fit_args+=(--ram "${LLMFIT_RAM}"); fi
+            if [[ -n "${LLMFIT_CPU_CORES}" ]]; then fit_args+=(--cpu-cores "${LLMFIT_CPU_CORES}"); fi
+            if [[ -n "${LLMFIT_MAX_CONTEXT}" ]]; then fit_args+=(--max-context "${LLMFIT_MAX_CONTEXT}"); fi
+            
+            local global_args=()
+            if [[ "${LLMFIT_NO_DASHBOARD}" == "true" ]]; then global_args+=(--no-dashboard); fi
+            
+            local filter_args=()
+            if [[ -n "${LLMFIT_TAG_FILTER}" ]]; then filter_args+=(--tag "${LLMFIT_TAG_FILTER}"); fi
+            
+            local script_dir
+            script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+            
+            # Output the filtered table
+            llmfit fit --sort "${next_sort}" --limit "${LLMFIT_LIMIT}" "${global_args[@]}" "${fit_args[@]}" 2>/dev/null | "${script_dir}/filter_compatible.py" "${filter_args[@]}" || true
+            exit 0
+            ;;
         -c|--clean|--manage)
             PARSE_CLEAN=true
             shift
@@ -640,19 +685,27 @@ while true; do
 
     # 3. Interactive TUI with fzf — press [b] to go back
     echo ""
-    success "Arrow keys to navigate, [ENTER] to download & start"
+    success "Arrow keys to navigate, [TAB] to select multiple, [ENTER] to download & start"
     echo -e "  ${BLUE}[b]${NC} back to menu  |  ${BLUE}[ESC]${NC} quit"
     echo ""
+
+    # Sync current sort criteria for Ctrl-S reload action
+    echo "${SORT_CRITERIA}" > /tmp/llmfit_current_sort.txt
 
     RESULT="$(echo "${MODEL_DATA}" | fzf \
         --ansi \
         --no-sort \
+        --multi \
+        -d '│' \
         --expect=b \
-        --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG}" \
+        --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG} | Tab: Select | Ctrl-S: Cycle Sort" \
         --prompt="Search model > " \
         --border=rounded \
-        --height=75% \
+        --height=80% \
         --layout=reverse \
+        --preview="python3 ${SCRIPT_DIR}/filter_compatible.py --preview {2} --selected {+2}" \
+        --preview-window="right:45%:wrap" \
+        --bind "ctrl-s:reload(LLMFIT_LIMIT='${LLMFIT_LIMIT}' LLMFIT_PERFECT='${LLMFIT_PERFECT}' LLMFIT_TOOL_USE='${LLMFIT_TOOL_USE}' LLMFIT_TAG_FILTER='${LLMFIT_TAG_FILTER}' LLMFIT_MEMORY='${LLMFIT_MEMORY}' LLMFIT_RAM='${LLMFIT_RAM}' LLMFIT_CPU_CORES='${LLMFIT_CPU_CORES}' LLMFIT_MAX_CONTEXT='${LLMFIT_MAX_CONTEXT}' ${SCRIPT_DIR}/LLMfitDownloadhelper.sh --next-sort)" \
         --query="ollama")"
 
     FZF_EXIT=$?
@@ -663,9 +716,9 @@ while true; do
         exit 0
     fi
 
-    # --expect prints the pressed key on line 1, the selected line on line 2
+    # --expect prints the pressed key on line 1, the selected lines from line 2 onwards
     EXPECTED_KEY="$(echo "${RESULT}" | head -1)"
-    SELECTED_LINE="$(echo "${RESULT}" | tail -1)"
+    SELECTED_LINE="$(echo "${RESULT}" | tail -n +2)"
 
     # [b] pressed → back to menu
     if [[ "${EXPECTED_KEY}" == "b" ]] || [[ -z "${EXPECTED_KEY}" && -z "${SELECTED_LINE}" ]]; then
@@ -673,39 +726,79 @@ while true; do
         continue
     fi
 
-    # 4. Extract model identifier from table row (column 2 between │ chars)
-    MODEL_NAME="$(echo "${SELECTED_LINE}" | grep -oP '(?<=\│)[^│]+(?=\│)' | sed -n '2p' | xargs 2>/dev/null || true)"
+    # 4. Extract model identifiers from selected table rows
+    local model_names=()
+    while read -r line; do
+        if [[ -n "${line}" ]]; then
+            local mname
+            mname="$(echo "${line}" | grep -oP '(?<=\│)[^│]+(?=\│)' | sed -n '2p' | xargs 2>/dev/null || true)"
+            mname="$(echo "${mname}" | sed 's/[^a-zA-Z0-9:._/-]//g' | awk '{print $1}')"
+            if [[ -n "${mname}" ]]; then
+                # Translate model name to GGUF source repository if mapped
+                if [[ -f "/tmp/llmfit_model_mapping.json" ]]; then
+                    local mapped
+                    mapped="$(jq -r --arg name "${mname}" '.[$name] // empty' /tmp/llmfit_model_mapping.json 2>/dev/null || true)"
+                    if [[ -n "${mapped}" ]]; then
+                        mname="${mapped}"
+                    fi
+                fi
+                # Prepend hf.co/ if needed
+                if [[ "${mname}" == */* ]] && [[ "${mname}" != hf.co/* ]]; then
+                    mname="hf.co/${mname}"
+                fi
+                model_names+=("${mname}")
+            fi
+        fi
+    done <<< "${SELECTED_LINE}"
 
-    # Only allow alphanumeric characters, colons, dots, slashes, underscores, and hyphens
-    MODEL_NAME="$(echo "${MODEL_NAME}" | sed 's/[^a-zA-Z0-9:._/-]//g' | awk '{print $1}')"
-
-    if [[ -z "${MODEL_NAME}" ]]; then
-        warn "Could not extract a valid model identifier. Press ENTER to retry."
+    if [[ ${#model_names[@]} -eq 0 ]]; then
+        warn "Could not extract any valid model identifiers. Press ENTER to retry."
         read -r
         continue
     fi
 
-    # Translate model name to GGUF source repository if mapped
-    if [[ -f "/tmp/llmfit_model_mapping.json" ]]; then
-        MAPPED_NAME="$(jq -r --arg name "${MODEL_NAME}" '.[$name] // empty' /tmp/llmfit_model_mapping.json 2>/dev/null || true)"
-        if [[ -n "${MAPPED_NAME}" ]]; then
-            MODEL_NAME="${MAPPED_NAME}"
-        fi
-    fi
-
-    # If the model name has a slash (HuggingFace repo) and does not start with hf.co/, prepend hf.co/
-    if [[ "${MODEL_NAME}" == */* ]] && [[ "${MODEL_NAME}" != hf.co/* ]]; then
-        MODEL_NAME="hf.co/${MODEL_NAME}"
-    fi
-
-    # 5. Start ollama (if needed) and pull & run the model
+    # 5. Start ollama (if needed) and run or pull the model(s)
     ensure_ollama_running
 
-    clear
-    echo -e "${BLUE}======================================================================${NC}"
-    echo -e "${BOLD}${GREEN}  Downloading & starting inference for: ${YELLOW}${MODEL_NAME}${NC}"
-    echo -e "${BLUE}======================================================================${NC}"
-    echo ""
-
-    exec ollama run "${MODEL_NAME}"
+    if [[ ${#model_names[@]} -eq 1 ]]; then
+        clear
+        echo -e "${BLUE}======================================================================${NC}"
+        echo -e "${BOLD}${GREEN}  Downloading & starting inference for: ${YELLOW}${model_names[0]}${NC}"
+        echo -e "${BLUE}======================================================================${NC}"
+        echo ""
+        exec ollama run "${model_names[0]}"
+    else
+        clear
+        echo -e "${BLUE}======================================================================${NC}"
+        echo -e "${BOLD}${GREEN}  Batch downloading ${YELLOW}${#model_names[@]}${GREEN} models:${NC}"
+        echo -e "${BLUE}======================================================================${NC}"
+        echo ""
+        
+        local success_count=0
+        for mname in "${model_names[@]}"; do
+            info "Pulling model ${mname} …"
+            if ollama pull "${mname}"; then
+                success_count=$((success_count + 1))
+            else
+                warn "Failed to pull ${mname}"
+            fi
+            echo ""
+        done
+        
+        success "Batch download finished. Successfully pulled ${success_count} / ${#model_names[@]} models."
+        echo ""
+        
+        local run_choice
+        run_choice=$(echo -e "Yes, run now\nNo, cancel" | fzf \
+            --header="Would you like to start inference for the first model (${model_names[0]})?" \
+            --prompt="Start inference? > " \
+            --border=rounded \
+            --height=15% \
+            --layout=reverse)
+            
+        if [[ "${run_choice}" == "Yes, run now" ]]; then
+            exec ollama run "${model_names[0]}"
+        fi
+        continue
+    fi
 done

@@ -49,7 +49,8 @@ Ollama with a single keystroke.
 | **Universal Hardware Profiling** | Detects CPU, RAM, and GPU (NVIDIA CUDA, AMD ROCm, Apple Silicon) anywhere.  |
 | **Flexible Sorting**            | Sort by any of **8 criteria** — date, context, score, speed, params, memory, use case, or provider. |
 | **Deep Cache Updates**          | Fetches **10,000+ trending models** from HuggingFace, caching updates for 2 hours. |
-| **fzf-Powered Interface**       | Blazing-fast fuzzy search with `[b]` to go back, `[ESC]` to quit.          |
+| **fzf-Powered Interface**       | Blazing-fast TUI with Tab multi-select for batch downloads, Ctrl-S to cycle sorting, and dynamic previews. |
+| **Model Comparison (Compare)** | Select exactly 2 models to see a side-by-side split screen diff (VRAM, speed, fit) in the preview. |
 | **Ollama Integration**          | Extracts clean model identifiers and runs `ollama run` automatically.       |
 | **Model Management**            | List installed models, delete individual models using `fzf`, or delete all. |
 | **Hardware Overrides**          | Override VRAM, RAM, or CPU cores via env vars to evaluate off-target hardware. |
@@ -148,7 +149,9 @@ The script will:
 |--------|--------------------|
 | `[b]`  | Back to sorting menu |
 | `[ESC]`| Quit the application |
-| `[ENTER]` | Select highlighted model |
+| `[TAB]`| Select / Deselect multiple models for batch download |
+| `[Ctrl-S]`| Cycle through sorting criteria (score, tps, params, mem, etc.) |
+| `[ENTER]` | Confirm selection & download/run model(s) |
 
 ---
 
