@@ -703,7 +703,7 @@ while true; do
         --border=rounded \
         --height=80% \
         --layout=reverse \
-        --preview="python3 ${SCRIPT_DIR}/filter_compatible.py --preview {2} --selected {+2}" \
+        --preview="python3 ${SCRIPT_DIR}/filter_compatible.py --preview {3} --selected {+3}" \
         --preview-window="down:35%:wrap" \
         --bind "ctrl-s:reload(LLMFIT_LIMIT='${LLMFIT_LIMIT}' LLMFIT_PERFECT='${LLMFIT_PERFECT}' LLMFIT_TOOL_USE='${LLMFIT_TOOL_USE}' LLMFIT_TAG_FILTER='${LLMFIT_TAG_FILTER}' LLMFIT_MEMORY='${LLMFIT_MEMORY}' LLMFIT_RAM='${LLMFIT_RAM}' LLMFIT_CPU_CORES='${LLMFIT_CPU_CORES}' LLMFIT_MAX_CONTEXT='${LLMFIT_MAX_CONTEXT}' ${SCRIPT_DIR}/LLMfitDownloadhelper.sh --next-sort)" \
         --query="ollama")"
