@@ -54,6 +54,11 @@ Ollama with a single keystroke.
 | **Ollama Integration**          | Extracts clean model identifiers and runs `ollama run` automatically.       |
 | **Model Management**            | List installed models, delete individual models using `fzf`, or delete all. |
 | **Hardware Overrides**          | Override VRAM, RAM, or CPU cores via env vars to evaluate off-target hardware. |
+| **Offline Mode**                | Skip online updates and cache aging checks entirely using `-o`/`--offline`. |
+| **Gated Model Support**         | Automatic loading of `HF_TOKEN` from local `.env` files for private/gated Hugging Face models. |
+| **Shell Launcher Widget**       | Quick-launcher widget (`--show-widget`) mapping `[Alt+L]` to load recommended model fits directly into your Zsh/Bash line buffer. |
+| **Custom System Prompts**       | Build and run ephemeral models with custom system prompts, choosing from 50 built-in professional cognitive templates. |
+| **Analytics & History Logs**    | Tracks model downloads and conversation runtimes in `~/.llmfit/download_history.log`, searchable via the main menu. |
 
 ---
 
