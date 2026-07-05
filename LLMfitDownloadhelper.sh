@@ -330,7 +330,21 @@ select_tag_filter() {
 # Self-update function
 # ------------------------------------------------------------------------------
 self_update() {
-    info "Checking for updates on GitHub …"
+    local script_dir
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    
+    # If inside a git work tree, run git pull to update all repository files
+    if git -C "${script_dir}" rev-parse --is-inside-work-tree &>/dev/null; then
+        info "Git repository detected. Updating all files via git pull …"
+        if git -C "${script_dir}" pull; then
+            success "Successfully updated repository via git pull."
+            exit 0
+        else
+            error_exit "Failed to run git pull."
+        fi
+    fi
+
+    info "Non-git environment detected. Checking for updates on GitHub …"
     local remote_version
     remote_version=$(curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" 2>/dev/null | grep -E '^VERSION=' | head -n 1 | cut -d'"' -f2 || echo "")
     
@@ -343,8 +357,6 @@ self_update() {
         info "Updating LLMfitDownloadhelper.sh …"
         local script_path
         script_path=$(realpath "$0")
-        local script_dir
-        script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
         
         # Download new script
         if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" -o "${script_path}"; then
