@@ -341,6 +341,14 @@ while true; do
         continue
     fi
 
+    # Translate model name to GGUF source repository if mapped
+    if [[ -f "/tmp/llmfit_model_mapping.json" ]]; then
+        MAPPED_NAME="$(jq -r --arg name "${MODEL_NAME}" '.[$name] // empty' /tmp/llmfit_model_mapping.json 2>/dev/null || true)"
+        if [[ -n "${MAPPED_NAME}" ]]; then
+            MODEL_NAME="${MAPPED_NAME}"
+        fi
+    fi
+
     # If the model name has a slash (HuggingFace repo) and does not start with hf.co/, prepend hf.co/
     if [[ "${MODEL_NAME}" == */* ]] && [[ "${MODEL_NAME}" != hf.co/* ]]; then
         MODEL_NAME="hf.co/${MODEL_NAME}"

@@ -5,13 +5,14 @@ import subprocess
 import re
 
 def get_compatible_models():
+    mapping = {}
     try:
         # Run llmfit list --json to get all models
         result = subprocess.run(['llmfit', 'list', '--json'], capture_output=True, text=True, check=True)
         models = json.loads(result.stdout)
     except Exception:
-        # If anything fails, return None (no filtering)
-        return None
+        # If anything fails, return empty dict
+        return {}, {}
 
     compatible = set()
     for model in models:
@@ -26,7 +27,21 @@ def get_compatible_models():
         
         if is_native or has_gguf_sources or is_gguf_repo or has_ollama_name:
             compatible.add(name)
+            # Save mapping
+            if has_gguf_sources:
+                mapping[name] = gguf_sources[0].get('repo', name)
+            elif has_ollama_name:
+                mapping[name] = ollama_name
+            else:
+                mapping[name] = name
             
+    # Write the mapping to a temporary JSON file
+    try:
+        with open('/tmp/llmfit_model_mapping.json', 'w') as f:
+            json.dump(mapping, f)
+    except Exception:
+        pass
+
     return compatible
 
 def main():
@@ -46,7 +61,7 @@ def main():
                 continue
                 
             # If we successfully loaded compatible models, filter by them
-            if compatible is not None:
+            if compatible:
                 if model_name in compatible:
                     sys.stdout.write(line)
             else:
