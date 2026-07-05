@@ -340,6 +340,11 @@ while true; do
         continue
     fi
 
+    # If the model name has a slash (HuggingFace repo) and does not start with hf.co/, prepend hf.co/
+    if [[ "${MODEL_NAME}" == */* ]] && [[ "${MODEL_NAME}" != hf.co/* ]]; then
+        MODEL_NAME="hf.co/${MODEL_NAME}"
+    fi
+
     # 5. Start ollama (if needed) and pull & run the model
     ensure_ollama_running
 
