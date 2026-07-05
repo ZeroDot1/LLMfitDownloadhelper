@@ -328,4 +328,7 @@ This project is open-source software licensed under the **GNU Affero General Pub
 
 ---
 
-*Maintained and curated by **ZeroDot1**.*
+## Credits & Acknowledgments
+
+- **Special Thanks** to [tevsa](https://github.com/tevsa) for his support and contributions to the development of this helper.
+- Maintained and curated by **ZeroDot1**.
