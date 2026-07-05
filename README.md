@@ -47,10 +47,11 @@ Ollama with a single keystroke.
 | Feature                         | Description                                                                 |
 |---------------------------------|-----------------------------------------------------------------------------|
 | **Universal Hardware Profiling** | Detects CPU, RAM, and GPU (NVIDIA CUDA, AMD ROCm, Apple Silicon) anywhere.  |
-| **Flexible Sorting**            | Sort by newest release, context window size, best fit score, or speed.      |
+| **Flexible Sorting**            | Sort by any of **8 criteria** — date, context, score, speed, params, memory, use case, or provider. |
 | **Deep Cache Updates**          | Fetches **500+ trending models** from HuggingFace on every launch.          |
-| **fzf-Powered Interface**       | Blazing-fast fuzzy search with responsive keyboard navigation.              |
+| **fzf-Powered Interface**       | Blazing-fast fuzzy search with `[b]` to go back, `[ESC]` to quit.          |
 | **Ollama Integration**          | Extracts clean model identifiers and runs `ollama run` automatically.       |
+| **Hardware Overrides**          | Override VRAM, RAM, or CPU cores via env vars to evaluate off-target hardware. |
 
 ---
 
@@ -134,16 +135,40 @@ cargo install llmfit
 
 The script will:
 1. Update the `llmfit` model cache (500+ trending models).
-2. Present a sorting menu with **8 criteria** (date, context, score, speed, params, memory, use case, provider).
+2. Present a **sorting menu** with **8 criteria** (date, context, score, speed, params, memory, use case, provider).
 3. Apply optional filters: `--perfect` (exact hardware match) and `--tool-use` (function-calling models only).
 4. Analyze your hardware and build a compatibility matrix.
-5. Launch an interactive `fzf` search window pre-filtered for Ollama models.
+5. Launch an interactive **fzf** search window pre-filtered for Ollama models.
 6. On selection, start the Ollama daemon automatically (if needed).
 7. Pull and run the chosen model with `ollama run`.
+
+**Keyboard shortcuts in the fzf window:**
+| Key    | Action             |
+|--------|--------------------|
+| `[b]`  | Back to sorting menu |
+| `[ESC]`| Quit the application |
+| `[ENTER]` | Select highlighted model |
 
 ---
 
 ## How it Works
+
+The script runs in a loop: **Cache → Menu → Fit → fzf → (run model | back to menu | quit)**.
+
+```
+  ┌─ Cache Update (once on launch)
+  │
+  ├─ Sorting Menu ──┐
+  │   [1-8] sort    │  back to menu
+  │   [9] quit      │      ▲
+  │        ↓        │      │
+  │   llmfit fit    │      │
+  │        ↓        │      │
+  │   fzf TUI ──────┘  [b] │
+  │   [ESC] → quit         │
+  │   [ENTER] → ollama run ┘ (session ends)
+  └─────────────────────────
+```
 
 1. **Cache Update**  
    On startup, the script connects to HuggingFace and updates your local `llmfit` cache with
@@ -162,6 +187,7 @@ The script will:
 4. **Interactive Search**  
    The TUI populates a list pre-filtered for `ollama`. Type any keyword (e.g., `llama3`, `qwen`,
    `mistral`) to narrow down the selection while keeping full visibility of compatibility data.
+   Press `[b]` to return to the sorting menu at any time; press `[ESC]` to quit.
 
 5. **Automatic Ollama Start**  
    Once a model is selected, the script checks if the Ollama service is running and starts it
@@ -211,7 +237,7 @@ ollama serve
 This can happen if the `llmfit` table output format changes. Try running:
 
 ```bash
-llmfit fit --sort score --cli --limit 10
+llmfit fit --sort score --limit 10
 ```
 
 to verify that model names appear in the expected format. If the output looks different, please
