@@ -327,9 +327,51 @@ select_tag_filter() {
 }
 
 # ------------------------------------------------------------------------------
+# Self-update function
+# ------------------------------------------------------------------------------
+self_update() {
+    info "Checking for updates on GitHub …"
+    local remote_version
+    remote_version=$(curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" 2>/dev/null | grep -E '^VERSION=' | head -n 1 | cut -d'"' -f2 || echo "")
+    
+    if [[ -z "${remote_version}" ]]; then
+        error_exit "Could not retrieve remote version info. Check your connection."
+    fi
+    
+    if [[ "${remote_version}" != "${VERSION}" ]]; then
+        success "New version found: ${remote_version} (Local: ${VERSION})"
+        info "Updating LLMfitDownloadhelper.sh …"
+        local script_path
+        script_path=$(realpath "$0")
+        local script_dir
+        script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+        
+        # Download new script
+        if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/LLMfitDownloadhelper.sh" -o "${script_path}"; then
+            error_exit "Failed to download update."
+        fi
+        
+        # Download new helper script
+        info "Updating filter_compatible.py …"
+        if ! curl -fsSL "https://raw.githubusercontent.com/ZeroDot1/LLMfitDownloadhelper/main/filter_compatible.py" -o "${script_dir}/filter_compatible.py"; then
+            warn "Failed to download filter_compatible.py update."
+        else
+            chmod +x "${script_dir}/filter_compatible.py"
+        fi
+        
+        success "Successfully updated to version ${remote_version}."
+        exit 0
+    else
+        success "LLMfitDownloadhelper is already up-to-date (Version ${VERSION})."
+        exit 0
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # Command Line Argument Parsing
 # ------------------------------------------------------------------------------
 PARSE_CLEAN=false
+PARSE_UPDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -344,6 +386,10 @@ while [[ $# -gt 0 ]]; do
             LLMFIT_TAG_FILTER="$2"
             shift 2
             ;;
+        --update)
+            PARSE_UPDATE=true
+            shift
+            ;;
         -h|--help)
             echo "LLMfitDownloadhelper v${VERSION}"
             echo "Usage: ./LLMfitDownloadhelper.sh [options]"
@@ -351,6 +397,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -c, --clean, --manage   Directly open the installed models manager (Ollama-Aufräumer)"
             echo "  -t, --tag <tag>         Pre-filter TUI models by tag (coding, vision, reasoning, audio, general)"
+            echo "  --update                Check for updates on GitHub and self-update"
             echo "  -h, --help              Show this help message"
             exit 0
             ;;
@@ -363,6 +410,10 @@ done
 if [[ "${PARSE_CLEAN}" == "true" ]]; then
     manage_installed_models
     exit 0
+fi
+
+if [[ "${PARSE_UPDATE}" == "true" ]]; then
+    self_update
 fi
 
 # ------------------------------------------------------------------------------
