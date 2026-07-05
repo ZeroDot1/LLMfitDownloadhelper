@@ -259,6 +259,14 @@ Make sure your terminal supports ANSI escape codes and Unicode. Most modern term
 
 ---
 
+## System Prompt Templates
+
+Version 2.2 includes a `system_prompts/` directory populated with **50 professional system prompt templates** (in US English) covering code optimization, database development, academic research, language tutors, game design, and DevOps.
+
+When starting a model, selecting **Launch with Custom System Prompt** allows you to dynamically choose any of the 50 built-in templates (prefixed as `[Built-in]`) or load your own custom `.txt` prompt files from `~/.llmfit/prompts/` (prefixed as `[User]`). The script automatically compiles and executes an ephemeral custom model in Ollama.
+
+---
+
 ## Command Line Options
 
 You can launch the script with various flags:

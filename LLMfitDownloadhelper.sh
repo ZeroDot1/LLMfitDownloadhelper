@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       2.1
+# Version:       2.2
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -33,7 +33,7 @@ if [[ -n "${HF_TOKEN:-}" ]]; then
     export HF_TOKEN
 fi
 
-VERSION="2.1"
+VERSION="2.2"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
 LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
@@ -90,15 +90,38 @@ view_history_log() {
 
 run_model_with_custom_prompt() {
     local model_name="$1"
+    local script_dir
+    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     local prompts_dir="${HOME}/.llmfit/prompts"
     mkdir -p "${prompts_dir}"
     
-    # Seed default prompts if directory is empty
-    if [[ ! -f "${prompts_dir}/Developer.txt" ]]; then
-        echo "You are a professional, senior software developer. Write clean, well-commented, and robust code. Prefer clarity over cleverness." > "${prompts_dir}/Developer.txt"
-        echo "Explain the concepts like I am five years old, using simple language, analogies, and no jargon." > "${prompts_dir}/ELI5.txt"
-        echo "You are a highly precise translator. Translate the user's input accurately into German, maintaining the tone and nuance." > "${prompts_dir}/German_Translator.txt"
-        echo "You are an expert summarizer. Provide concise, bulleted summaries highlighting only key takeaways from the text." > "${prompts_dir}/Summarizer.txt"
+    # Seed user templates folder with a custom reminder if empty
+    if [[ ! -f "${prompts_dir}/My_Custom_Prompt.txt" ]]; then
+        echo "You are a helpful AI assistant. Answer concisely and professionally." > "${prompts_dir}/My_Custom_Prompt.txt"
+    fi
+    
+    # Compile prompt templates from both built-in folder and user folder
+    local prompt_names=()
+    local prompt_paths=()
+    
+    # 1. Add built-in prompts
+    if [[ -d "${script_dir}/system_prompts" ]]; then
+        while read -r file; do
+            if [[ -n "${file}" ]]; then
+                prompt_names+=("[Built-in] ${file%.txt}")
+                prompt_paths+=("${script_dir}/system_prompts/${file}")
+            fi
+        done < <(find "${script_dir}/system_prompts" -name "*.txt" -printf "%f\n" | sort)
+    fi
+    
+    # 2. Add user prompts
+    if [[ -d "${prompts_dir}" ]]; then
+        while read -r file; do
+            if [[ -n "${file}" ]]; then
+                prompt_names+=("[User] ${file%.txt}")
+                prompt_paths+=("${prompts_dir}/${file}")
+            fi
+        done < <(find "${prompts_dir}" -name "*.txt" -printf "%f\n" | sort)
     fi
     
     # Prompt user for prompt mode
@@ -111,59 +134,77 @@ run_model_with_custom_prompt() {
         --layout=reverse)
         
     if [[ "${mode}" == "Launch with Custom System Prompt" ]]; then
-        local selected_prompt_file
-        selected_prompt_file=$(find "${prompts_dir}" -name "*.txt" -printf "%f\n" | fzf \
-            --header="Select a system prompt template (ESC to cancel)" \
-            --prompt="Select prompt > " \
-            --border=rounded \
-            --height=30% \
-            --layout=reverse)
-            
-        if [[ -n "${selected_prompt_file}" ]]; then
-            local prompt_content
-            prompt_content=$(cat "${prompts_dir}/${selected_prompt_file}")
-            
-            # Sanitize model name for Ollama tag format
-            local safe_model_name
-            safe_model_name=$(echo "${model_name}" | tr '[:upper:]' '[:lower:]' | tr '/' '-' | tr -cd 'a-z0-9.-')
-            local prompt_name_clean
-            prompt_name_clean=$(echo "${selected_prompt_file%.txt}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9.-')
-            local temp_model_tag="ephemeral-${safe_model_name}-${prompt_name_clean}"
-            
-            info "Building ephemeral model ${temp_model_tag} with template ${selected_prompt_file%.txt} …"
-            
-            local temp_modelfile="/tmp/Modelfile-${temp_model_tag}"
-            echo "FROM ${model_name}" > "${temp_modelfile}"
-            # Escape quotes in prompt content
-            local escaped_prompt
-            escaped_prompt=$(echo "${prompt_content}" | sed 's/"/\\"/g')
-            echo "SYSTEM \"${escaped_prompt}\"" >> "${temp_modelfile}"
-            
-            if ollama create "${temp_model_tag}" -f "${temp_modelfile}" &>/dev/null; then
-                success "Ephemeral model built successfully."
-                echo ""
+        if [[ ${#prompt_names[@]} -eq 0 ]]; then
+            warn "No system prompt templates found."
+            sleep 1.5
+        else
+            local selected_line
+            selected_line=$(printf "%s\n" "${prompt_names[@]}" | fzf \
+                --header="Select a system prompt template (ESC to cancel)" \
+                --prompt="Select prompt > " \
+                --border=rounded \
+                --height=50% \
+                --layout=reverse)
                 
-                local start_time
-                start_time=$(date +%s)
-                local run_status=0
-                ollama run "${temp_model_tag}" || run_status=$?
-                local end_time
-                end_time=$(date +%s)
-                local duration=$((end_time - start_time))
+            if [[ -n "${selected_line}" ]]; then
+                local idx=-1
+                for i in "${!prompt_names[@]}"; do
+                    if [[ "${prompt_names[i]}" == "${selected_line}" ]]; then
+                        idx=$i
+                        break
+                    fi
+                done
                 
-                if [[ ${run_status} -eq 0 ]]; then
-                    log_history "RUN" "${model_name}" "| Prompt: ${selected_prompt_file%.txt} | Duration: ${duration}s"
-                else
-                    log_history "RUN_FAILED" "${model_name}" "| Prompt: ${selected_prompt_file%.txt} | Exit code: ${run_status} | Duration: ${duration}s"
+                if [[ ${idx} -ne -1 ]]; then
+                    local selected_path="${prompt_paths[idx]}"
+                    local prompt_content
+                    prompt_content=$(cat "${selected_path}")
+                    
+                    local prompt_display_name
+                    prompt_display_name="${selected_line#*] }"
+                    
+                    # Sanitize model name for Ollama tag format
+                    local safe_model_name
+                    safe_model_name=$(echo "${model_name}" | tr '[:upper:]' '[:lower:]' | tr '/' '-' | tr -cd 'a-z0-9.-')
+                    local prompt_name_clean
+                    prompt_name_clean=$(echo "${prompt_display_name}" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9.-')
+                    local temp_model_tag="ephemeral-${safe_model_name}-${prompt_name_clean}"
+                    
+                    info "Building ephemeral model ${temp_model_tag} with template ${prompt_display_name} …"
+                    
+                    local temp_modelfile="/tmp/Modelfile-${temp_model_tag}"
+                    echo "FROM ${model_name}" > "${temp_modelfile}"
+                    local escaped_prompt
+                    escaped_prompt=$(echo "${prompt_content}" | sed 's/"/\\"/g')
+                    echo "SYSTEM \"${escaped_prompt}\"" >> "${temp_modelfile}"
+                    
+                    if ollama create "${temp_model_tag}" -f "${temp_modelfile}" &>/dev/null; then
+                        success "Ephemeral model built successfully."
+                        echo ""
+                        
+                        local start_time
+                        start_time=$(date +%s)
+                        local run_status=0
+                        ollama run "${temp_model_tag}" || run_status=$?
+                        local end_time
+                        end_time=$(date +%s)
+                        local duration=$((end_time - start_time))
+                        
+                        if [[ ${run_status} -eq 0 ]]; then
+                            log_history "RUN" "${model_name}" "| Prompt: ${prompt_display_name} | Duration: ${duration}s"
+                        else
+                            log_history "RUN_FAILED" "${model_name}" "| Prompt: ${prompt_display_name} | Exit code: ${run_status} | Duration: ${duration}s"
+                        fi
+                        
+                        info "Cleaning up ephemeral model ${temp_model_tag} …"
+                        ollama rm "${temp_model_tag}" &>/dev/null || true
+                        rm -f "${temp_modelfile}"
+                        return
+                    else
+                        rm -f "${temp_modelfile}"
+                        warn "Failed to build ephemeral model. Falling back to default launch."
+                    fi
                 fi
-                
-                info "Cleaning up ephemeral model ${temp_model_tag} …"
-                ollama rm "${temp_model_tag}" &>/dev/null || true
-                rm -f "${temp_modelfile}"
-                return
-            else
-                rm -f "${temp_modelfile}"
-                warn "Failed to build ephemeral model. Falling back to default launch."
             fi
         fi
     fi
