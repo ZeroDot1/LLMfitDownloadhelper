@@ -70,10 +70,18 @@ trap cleanup EXIT
 # ------------------------------------------------------------------------------
 # Build extra CLI arguments from environment variables
 # ------------------------------------------------------------------------------
-build_llmfit_args() {
+# Arguments valid for ALL llmfit subcommands (update, fit, …)
+build_global_args() {
     local args=()
-    args+=(--no-dashboard)
+    if [[ "${LLMFIT_NO_DASHBOARD}" == "true" ]]; then
+        args+=(--no-dashboard)
+    fi
+    echo "${args[@]}"
+}
 
+# Arguments valid ONLY for `llmfit fit`
+build_fit_args() {
+    local args=()
     if [[ "${LLMFIT_PERFECT}" == "true" ]]; then
         args+=(--perfect)
     fi
@@ -92,7 +100,6 @@ build_llmfit_args() {
     if [[ -n "${LLMFIT_MAX_CONTEXT}" ]]; then
         args+=(--max-context "${LLMFIT_MAX_CONTEXT}")
     fi
-
     echo "${args[@]}"
 }
 
@@ -199,9 +206,9 @@ echo -e "${BLUE}================================================================
 # 1. Database update with extended model list
 info "Updating llmfit database (extended model list) …"
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
-LLMFIT_ARGS="$(build_llmfit_args)"
+GLOBAL_ARGS="$(build_global_args)"
 # shellcheck disable=SC2086
-llmfit update --trending "${LLMFIT_LIMIT}" ${LLMFIT_ARGS}
+llmfit update --trending "${LLMFIT_LIMIT}" ${GLOBAL_ARGS}
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 echo ""
 
@@ -267,7 +274,9 @@ info "Analyzing local hardware and generating matrix …"
 
 # 3. llmfit query with hardware auto-detection and user sorting
 # shellcheck disable=SC2086
-MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --cli --limit "${LLMFIT_LIMIT}" ${LLMFIT_ARGS} 2>/dev/null || true)"
+FIT_ARGS="$(build_fit_args)"
+# shellcheck disable=SC2086
+MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null || true)"
 
 if [[ -z "${MODEL_DATA}" ]]; then
     warn "No optimal matrix found. Loading system fit list …"
