@@ -196,6 +196,96 @@ ensure_ollama_running() {
 }
 
 # ------------------------------------------------------------------------------
+# Manage installed models (list / delete)
+# ------------------------------------------------------------------------------
+manage_installed_models() {
+    ensure_ollama_running
+    while true; do
+        clear
+        echo -e "${BLUE}======================================================================${NC}"
+        echo -e "${BOLD}${CYAN}  Manage Installed Models${NC}"
+        echo -e "${BLUE}======================================================================${NC}"
+        echo ""
+        
+        # Get models with header
+        local list_output
+        list_output=$(ollama list)
+        
+        # Check if empty (only header line)
+        if [[ $(echo "${list_output}" | wc -l) -le 1 ]]; then
+            info "No models are currently installed in Ollama."
+            echo ""
+            echo -e "${YELLOW}Press ENTER to return to main menu...${NC}"
+            read -r _
+            break
+        fi
+        
+        echo -e "${BOLD}Installed Models:${NC}"
+        echo "${list_output}"
+        echo ""
+        echo -e "${BOLD}${CYAN}Select an action:${NC}"
+        echo -e " [1] Delete a specific model"
+        echo -e " [2] Delete ALL models"
+        echo -e " [3] Return to main menu"
+        echo ""
+        echo -n "Choice [1-3]: "
+        read -r SUB_CHOICE
+        
+        case "${SUB_CHOICE}" in
+            1)
+                # Show list in fzf to select one to delete
+                local selection
+                selection=$(echo "${list_output}" | tail -n +2 | fzf \
+                    --header="Select a model to DELETE (ESC to cancel)" \
+                    --prompt="Select model > " \
+                    --border=rounded \
+                    --height=50% \
+                    --layout=reverse)
+                
+                if [[ -n "${selection}" ]]; then
+                    local model_to_delete
+                    model_to_delete=$(echo "${selection}" | awk '{print $1}')
+                    echo ""
+                    echo -e "${RED}${BOLD}WARNING:${NC} Are you sure you want to delete ${YELLOW}${model_to_delete}${NC}? [y/N]"
+                    read -r CONFIRM
+                    if [[ "${CONFIRM}" =~ ^[yY]$ ]]; then
+                        info "Deleting ${model_to_delete} ..."
+                        ollama rm "${model_to_delete}"
+                        success "Model deleted successfully."
+                        sleep 1.5
+                    else
+                        info "Deletion cancelled."
+                        sleep 1
+                    fi
+                fi
+                ;;
+            2)
+                echo ""
+                echo -e "${RED}${BOLD}DANGER:${NC} Are you absolutely sure you want to delete ${RED}${BOLD}ALL${NC} installed models? [y/N]"
+                read -r CONFIRM
+                if [[ "${CONFIRM}" =~ ^[yY]$ ]]; then
+                    local model_name
+                    echo "${list_output}" | tail -n +2 | awk '{print $1}' | while read -r model_name; do
+                        if [[ -n "${model_name}" ]]; then
+                            info "Deleting ${model_name} ..."
+                            ollama rm "${model_name}"
+                        fi
+                    done
+                    success "All models deleted."
+                    sleep 2
+                else
+                    info "Deletion cancelled."
+                    sleep 1
+                fi
+                ;;
+            3|*)
+                break
+                ;;
+        esac
+    done
+}
+
+# ------------------------------------------------------------------------------
 # Main program
 # ------------------------------------------------------------------------------
 clear
@@ -225,9 +315,10 @@ while true; do
     echo -e " [6] Lowest memory usage        (by memory utilization)"
     echo -e " [7] Grouped by use case"
     echo -e " [8] Grouped by model provider"
-    echo -e " [9] Quit"
+    echo -e " [9] Manage installed models"
+    echo -e " [10] Quit"
     echo ""
-    echo -n "Choice [1-9]: "
+    echo -n "Choice [1-10]: "
     read -r CHOICE
 
     SORT_CRITERIA="score"
@@ -266,7 +357,11 @@ while true; do
             SORT_CRITERIA="provider"
             HEADER_MSG="Grouped by model provider"
             ;;
-        9|*)
+        9)
+            manage_installed_models
+            continue
+            ;;
+        10|*)
             echo -e "\n${YELLOW}Exiting application.${NC}"
             exit 0
             ;;

@@ -51,6 +51,7 @@ Ollama with a single keystroke.
 | **Deep Cache Updates**          | Fetches **500+ trending models** from HuggingFace on every launch.          |
 | **fzf-Powered Interface**       | Blazing-fast fuzzy search with `[b]` to go back, `[ESC]` to quit.          |
 | **Ollama Integration**          | Extracts clean model identifiers and runs `ollama run` automatically.       |
+| **Model Management**            | List installed models, delete individual models using `fzf`, or delete all. |
 | **Hardware Overrides**          | Override VRAM, RAM, or CPU cores via env vars to evaluate off-target hardware. |
 
 ---
@@ -135,12 +136,12 @@ cargo install llmfit
 
 The script will:
 1. Update the `llmfit` model cache (500+ trending models).
-2. Present a **sorting menu** with **8 criteria** (date, context, score, speed, params, memory, use case, provider).
+2. Present a **sorting menu** with **8 criteria** (date, context, score, speed, params, memory, use case, provider) plus a **model manager**.
 3. Apply optional filters: `--perfect` (exact hardware match) and `--tool-use` (function-calling models only).
 4. Analyze your hardware and build a compatibility matrix.
 5. Launch an interactive **fzf** search window pre-filtered for Ollama models.
 6. On selection, start the Ollama daemon automatically (if needed).
-7. Pull and run the chosen model with `ollama run`.
+7. Pull and run the chosen model with `ollama run` (automatically translating base models to GGUF-compatible versions if needed).
 
 **Keyboard shortcuts in the fzf window:**
 | Key    | Action             |
@@ -153,21 +154,22 @@ The script will:
 
 ## How it Works
 
-The script runs in a loop: **Cache → Menu → Fit → fzf → (run model | back to menu | quit)**.
+The script runs in a loop: **Cache → Menu → Fit → fzf → (run model | back to menu | quit)** or **Menu → Model Manager**.
 
 ```
   ┌─ Cache Update (once on launch)
   │
-  ├─ Sorting Menu ──┐
-  │   [1-8] sort    │  back to menu
-  │   [9] quit      │      ▲
-  │        ↓        │      │
-  │   llmfit fit    │      │
-  │        ↓        │      │
-  │   fzf TUI ──────┘  [b] │
-  │   [ESC] → quit         │
-  │   [ENTER] → ollama run ┘ (session ends)
-  └─────────────────────────
+  ├─ Main Menu ───────────────┐
+  │   [1-8] sort              │  back to menu
+  │   [9] manage models       │      ▲
+  │   [10] quit               │      │
+  │        ↓ (if [1-8] chosen)│      │
+  │   llmfit fit              │      │
+  │        ↓                  │      │
+  │   fzf TUI ────────────────┘  [b] │
+  │   [ESC] → quit                   │
+  │   [ENTER] → ollama run ──────────┘ (session ends)
+  └───────────────────────────
 ```
 
 1. **Cache Update**  
