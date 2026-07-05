@@ -22,6 +22,7 @@ import argparse
 
 def get_compatible_models(tag_filter=None):
     mapping = {}
+    sizes = {}
     try:
         # Run llmfit list --json to get all models
         result = subprocess.run(['llmfit', 'list', '--json'], capture_output=True, text=True, check=True)
@@ -73,10 +74,15 @@ def get_compatible_models(tag_filter=None):
             else:
                 mapping[name] = name
             
-    # Write the mapping to a temporary JSON file
+            # Save size (using min_ram_gb as a proxy for file download size in GB)
+            sizes[name] = model.get('min_ram_gb', 4.0)
+            
+    # Write the mapping and sizes to temporary JSON files
     try:
         with open('/tmp/llmfit_model_mapping.json', 'w') as f:
             json.dump(mapping, f)
+        with open('/tmp/llmfit_model_sizes.json', 'w') as f:
+            json.dump(sizes, f)
     except Exception:
         pass
 

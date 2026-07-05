@@ -104,7 +104,7 @@ build_fit_args() {
 }
 
 # ------------------------------------------------------------------------------
-# Preflight checks
+# Preflight checks & dependency verification
 # ------------------------------------------------------------------------------
 
 # System requires Bash 4+ (for `pipefail`)
@@ -115,21 +115,78 @@ fi
 # Export Ollama host
 export OLLAMA_HOST
 
-# Check: fzf
-if ! command -v fzf &> /dev/null; then
-    error_exit "'fzf' is not installed.
+version_compare() {
+    local ver1=()
+    local ver2=()
+    IFS='.' read -r -a ver1 <<< "$1"
+    IFS='.' read -r -a ver2 <<< "$2"
+    for ((i=0; i<3; i++)); do
+        local v1="${ver1[i]:-0}"
+        local v2="${ver2[i]:-0}"
+        v1=$(echo "${v1}" | grep -oE '^[0-9]+' || echo 0)
+        v2=$(echo "${v2}" | grep -oE '^[0-9]+' || echo 0)
+        if (( v1 > v2 )); then
+            return 0
+        elif (( v1 < v2 )); then
+            return 1
+        fi
+    done
+    return 0
+}
+
+check_dependencies() {
+    local min_fzf="0.20.0"
+    local min_llmfit="0.9.0"
+    local min_ollama="0.1.48"
+    
+    # 1. Check fzf
+    if ! command -v fzf &>/dev/null; then
+        error_exit "'fzf' is not installed.
   Install it with:
     Arch Linux:  ${CYAN}sudo pacman -S fzf${NC}
     Ubuntu:      ${CYAN}sudo apt install fzf${NC}"
-fi
+    fi
+    local fzf_ver
+    fzf_ver=$(fzf --version 2>/dev/null | awk '{print $1}')
+    if ! version_compare "${fzf_ver}" "${min_fzf}"; then
+        error_exit "'fzf' version is too old: ${fzf_ver} (Minimum required: ${min_fzf}).
+  Upgrade fzf:
+    Arch Linux:  ${CYAN}sudo pacman -Syu fzf${NC}
+    Ubuntu:      ${CYAN}sudo apt update && sudo apt install --only-upgrade fzf${NC}"
+    fi
 
-# Check: llmfit
-if ! command -v llmfit &> /dev/null; then
-    error_exit "'llmfit' is not installed.
+    # 2. Check llmfit
+    if ! command -v llmfit &>/dev/null; then
+        error_exit "'llmfit' is not installed.
   Install it with:
     ${CYAN}curl -fsSL https://llmfit.axjns.dev/install.sh | sh${NC}
     or via Cargo: ${CYAN}cargo install llmfit${NC}"
-fi
+    fi
+    local llmfit_ver
+    llmfit_ver=$(llmfit --version 2>/dev/null | awk '{print $2}')
+    if ! version_compare "${llmfit_ver}" "${min_llmfit}"; then
+        error_exit "'llmfit' version is too old: ${llmfit_ver} (Minimum required: ${min_llmfit}).
+  Upgrade llmfit:
+    ${CYAN}curl -fsSL https://llmfit.axjns.dev/install.sh | sh${NC}
+    or via Cargo: ${CYAN}cargo install --force llmfit${NC}"
+    fi
+
+    # 3. Check ollama
+    if ! command -v ollama &>/dev/null; then
+        error_exit "'ollama' is not installed.
+  Install it with:
+    ${CYAN}curl -fsSL https://ollama.com | sh${NC}"
+    fi
+    local ollama_ver
+    ollama_ver=$(ollama --version 2>/dev/null | awk '{print $4}')
+    if ! version_compare "${ollama_ver}" "${min_ollama}"; then
+        error_exit "'ollama' version is too old: ${ollama_ver} (Minimum required: ${min_ollama}).
+  Upgrade ollama:
+    ${CYAN}curl -fsSL https://ollama.com | sh${NC}"
+    fi
+}
+
+check_dependencies
 
 # ------------------------------------------------------------------------------
 # Start Ollama service (if needed)
@@ -728,12 +785,14 @@ while true; do
 
     # 4. Extract model identifiers from selected table rows
     local model_names=()
+    local base_names=()
     while read -r line; do
         if [[ -n "${line}" ]]; then
             local mname
             mname="$(echo "${line}" | grep -oP '(?<=\│)[^│]+(?=\│)' | sed -n '2p' | xargs 2>/dev/null || true)"
             mname="$(echo "${mname}" | sed 's/[^a-zA-Z0-9:._/-]//g' | awk '{print $1}')"
             if [[ -n "${mname}" ]]; then
+                base_names+=("${mname}")
                 # Translate model name to GGUF source repository if mapped
                 if [[ -f "/tmp/llmfit_model_mapping.json" ]]; then
                     local mapped
@@ -757,6 +816,42 @@ while true; do
         continue
     fi
 
+    # Check free disk space before pulling
+    if [[ -f "/tmp/llmfit_model_sizes.json" ]]; then
+        local total_required_gb=0
+        for bname in "${base_names[@]}"; do
+            local req_gb
+            req_gb="$(jq -r --arg name "${bname}" '.[$name] // 4.0' /tmp/llmfit_model_sizes.json 2>/dev/null || echo "4.0")"
+            total_required_gb=$(awk "BEGIN {print ${total_required_gb} + ${req_gb}}")
+        done
+        
+        local check_dir="${HOME}"
+        if [[ -d "${HOME}/.ollama" ]]; then
+            check_dir="${HOME}/.ollama"
+        fi
+        local free_space_kb
+        free_space_kb=$(df -k "${check_dir}" | tail -1 | awk '{print $4}')
+        local free_space_gb=$&lpar;&lpar; free_space_kb / 1024 / 1024 &rpar;&rpar;
+        
+        local space_ok
+        space_ok=$(awk "BEGIN {print (${free_space_gb} >= ${total_required_gb}) ? 1 : 0}")
+        if [[ "${space_ok}" -eq 0 ]]; then
+            warn "Low disk space! The selected model(s) require approximately ${total_required_gb} GB, but you only have ${free_space_gb} GB free on ${check_dir}."
+            local disk_confirm
+            disk_confirm=$(echo -e "No, cancel\nYes, proceed anyway" | fzf \
+                --header="Do you want to proceed despite low disk space?" \
+                --prompt="Low disk space > " \
+                --border=rounded \
+                --height=15% \
+                --layout=reverse)
+            if [[ "${disk_confirm}" != "Yes, proceed anyway" ]]; then
+                info "Download cancelled."
+                sleep 1.5
+                continue
+            fi
+        fi
+    fi
+
     # 5. Start ollama (if needed) and run or pull the model(s)
     ensure_ollama_running
 
@@ -766,7 +861,15 @@ while true; do
         echo -e "${BOLD}${GREEN}  Downloading & starting inference for: ${YELLOW}${model_names[0]}${NC}"
         echo -e "${BLUE}======================================================================${NC}"
         echo ""
-        exec ollama run "${model_names[0]}"
+        
+        local run_status=0
+        ollama run "${model_names[0]}" || run_status=$?
+        if [[ ${run_status} -ne 0 ]]; then
+            warn "Ollama run exited with error code ${run_status}."
+            echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
+            read -r _
+        fi
+        continue
     else
         clear
         echo -e "${BLUE}======================================================================${NC}"
@@ -777,10 +880,12 @@ while true; do
         local success_count=0
         for mname in "${model_names[@]}"; do
             info "Pulling model ${mname} …"
-            if ollama pull "${mname}"; then
+            local pull_status=0
+            ollama pull "${mname}" || pull_status=$?
+            if [[ ${pull_status} -eq 0 ]]; then
                 success_count=$((success_count + 1))
             else
-                warn "Failed to pull ${mname}"
+                warn "Failed to pull ${mname}. Ollama exited with code ${pull_status}."
             fi
             echo ""
         done
@@ -797,7 +902,13 @@ while true; do
             --layout=reverse)
             
         if [[ "${run_choice}" == "Yes, run now" ]]; then
-            exec ollama run "${model_names[0]}"
+            local run_status=0
+            ollama run "${model_names[0]}" || run_status=$?
+            if [[ ${run_status} -ne 0 ]]; then
+                warn "Ollama run exited with error code ${run_status}."
+                echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
+                read -r _
+            fi
         fi
         continue
     fi

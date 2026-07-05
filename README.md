@@ -80,8 +80,12 @@ Make sure you have the [required dependencies](#prerequisites--dependencies) ins
 
 ## Prerequisites / Dependencies
 
-Before launching the helper, all core dependencies must be installed and globally accessible
-via your system's `PATH`. Follow the steps for your distribution:
+The script automatically performs a preflight dependency and version check on launch. The following tools must be installed in your `$PATH` and meet the minimum version requirements:
+- **fzf** (`>= 0.20.0`)
+- **llmfit** (`>= 0.9.0`)
+- **ollama** (`>= 0.1.48`, required for HuggingFace `hf.co` registry support)
+
+Follow the steps below to install or upgrade dependencies:
 
 ### 1. Arch Linux
 
