@@ -174,9 +174,9 @@ run_model_with_custom_prompt() {
                     
                     local temp_modelfile="/tmp/Modelfile-${temp_model_tag}"
                     echo "FROM ${model_name}" > "${temp_modelfile}"
-                    local escaped_prompt
-                    escaped_prompt=$(echo "${prompt_content}" | sed 's/"/\\"/g')
-                    echo "SYSTEM \"${escaped_prompt}\"" >> "${temp_modelfile}"
+                    echo "SYSTEM \"\"\"" >> "${temp_modelfile}"
+                    echo "${prompt_content}" >> "${temp_modelfile}"
+                    echo "\"\"\"" >> "${temp_modelfile}"
                     
                     if ollama create "${temp_model_tag}" -f "${temp_modelfile}" &>/dev/null; then
                         success "Ephemeral model built successfully."
@@ -225,6 +225,33 @@ run_model_with_custom_prompt() {
         warn "Ollama run exited with error code ${run_status}."
         echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
         read -r _
+    fi
+}
+
+run_installed_model_with_prompt() {
+    ensure_ollama_running
+    
+    local list_output
+    list_output=$(ollama list 2>/dev/null || echo "")
+    if [[ -z "${list_output}" || "$(echo "${list_output}" | wc -l)" -le 1 ]]; then
+        warn "No models are currently installed in Ollama."
+        sleep 1.5
+        return
+    fi
+    
+    local selection
+    selection=$(echo "${list_output}" | tail -n +2 | fzf \
+        --header="Select an installed model to run (ESC to cancel)" \
+        --prompt="Select model > " \
+        --border=rounded \
+        --height=50% \
+        --layout=reverse)
+        
+    if [[ -n "${selection}" ]]; then
+        local model_to_run
+        model_to_run=$(echo "${selection}" | awk '{print $1}')
+        
+        run_model_with_custom_prompt "${model_to_run}"
     fi
 }
 
@@ -883,11 +910,12 @@ while true; do
         echo -e " [8] Grouped by model provider"
         echo -e " [9] Manage installed models"
         echo -e " [10] Filter by tag / category   (Current: ${LLMFIT_TAG_FILTER:-None})"
-        echo -e " [11] Force update model database (all models)"
-        echo -e " [12] View download & run history"
-        echo -e " [13] Quit"
+        echo -e " [11] Run installed model with Custom System Prompt"
+        echo -e " [12] Force update model database (all models)"
+        echo -e " [13] View download & run history"
+        echo -e " [14] Quit"
         echo ""
-        echo -n "Choice [1-13]: "
+        echo -n "Choice [1-14]: "
         read -r CHOICE
     fi
 
@@ -936,14 +964,18 @@ while true; do
             continue
             ;;
         11)
-            update_database_if_old true
+            run_installed_model_with_prompt
             continue
             ;;
         12)
+            update_database_if_old true
+            continue
+            ;;
+        13)
             view_history_log
             continue
             ;;
-        13|*)
+        14|*)
             echo -e "\n${YELLOW}Exiting application.${NC}"
             exit 0
             ;;

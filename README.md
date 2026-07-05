@@ -161,27 +161,30 @@ The script will:
 
 ## How it Works
 
-The script runs in a loop: **Cache Check/Update → Menu → Fit → fzf → (run model | back to menu | quit)**, **Menu → Model Manager**, or **Menu → Force Update DB**.
+The script runs in a loop: **Cache Check/Update → Menu → Fit → fzf → (run model | back to menu | quit)**, **Menu → Model Manager**, **Menu → Run Installed with Prompt**, or **Menu → Force Update DB**.
 
 ```
   ┌─ Cache Check & Auto-Update (on launch, if > 2h old)
   │
-  ├─ Main Menu ───────────────┐
-  │   [1-8] sort              │  back to menu
-  │   [9] manage models       │      ▲
-  │   [10] force update db    │      │
-  │   [11] quit               │      │
-  │        ↓ (if [1-8] chosen)│      │
-  │   llmfit fit              │      │
-  │        ↓                  │      │
-  │   fzf TUI ────────────────┘  [b] │
-  │   [ESC] → quit                   │
-  │   [ENTER] → ollama run ──────────┘ (session ends)
-  └───────────────────────────
+  ├─ Main Menu ─────────────────────────────────────────┐
+  │   [1-8] sort criteria                               │  back to menu
+  │   [9] manage installed models (Aufräumer)           │      ▲
+  │   [10] filter by tag / category                     │      │
+  │   [11] run installed model with custom system prompt │      │
+  │   [12] force update model database                  │      │
+  │   [13] view download & run history                  │      │
+  │   [14] quit                                         │      │
+  │        ↓ (if [1-8] chosen)                          │      │
+  │   llmfit fit                                        │      │
+  │        ↓                                            │      │
+  │   fzf TUI ──────────────────────────────────────────┘  [b] │
+  │   [ESC] → quit                                             │
+  │   [ENTER] → ollama run (ephemeral / standard) ─────────────┘
+  └─────────────────────────────────────────────────────
 ```
 
 1. **Cache Update**  
-   On startup, the script checks if the local cache (`~/.llmfit/hf_models_cache.json`) is older than 2 hours. If it is, it automatically updates the cache with **10,000+ models** from HuggingFace. You can also manually trigger a deep update fetching up to **30,000 models** (via choice 10 in the main menu, with a resource warning).
+   On startup, the script checks if the local cache (`~/.llmfit/hf_models_cache.json`) is older than 2 hours. If it is, it automatically updates the cache with **10,000+ models** from HuggingFace. You can also manually trigger a deep update fetching up to **30,000 models** (via choice 12 in the main menu, with a resource warning).
 
 2. **Sorting Choice**  
    You pick how models are sorted — **8 criteria** available:
@@ -209,7 +212,7 @@ The script runs in a loop: **Cache Check/Update → Menu → Fit → fzf → (ru
 7. **Inference & Download Analytics Logging**  
    Every successful model download (`PULLED`), failed download (`PULL_FAILED`), successful run (`RUN`), or failed run (`RUN_FAILED`) is logged to **`~/.llmfit/download_history.log`**.
    - For run sessions, it records the exact duration of the conversation (in seconds).
-   - You can view this log file directly inside the script by choosing **`[12] View download & run history`** from the main menu, which launches an interactive `fzf` viewer to filter and browse history by keyword, date, or model.
+   - You can view this log file directly inside the script by choosing **`[13] View download & run history`** from the main menu, which launches an interactive `fzf` viewer to filter and browse history by keyword, date, or model.
 
 8. **Dynamic Modelfile-Builder & System Prompts**  
    When launching a model, the TUI asks if you want to use a Custom System Prompt. 
