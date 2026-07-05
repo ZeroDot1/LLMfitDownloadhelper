@@ -206,6 +206,16 @@ The script runs in a loop: **Cache Check/Update → Menu → Fit → fzf → (ru
    `ollama run` pulls the model (if not cached) and starts an interactive chat session in your
    terminal.
 
+7. **Inference & Download Analytics Logging**  
+   Every successful model download (`PULLED`), failed download (`PULL_FAILED`), successful run (`RUN`), or failed run (`RUN_FAILED`) is logged to **`~/.llmfit/download_history.log`**.
+   - For run sessions, it records the exact duration of the conversation (in seconds).
+   - You can view this log file directly inside the script by choosing **`[12] View download & run history`** from the main menu, which launches an interactive `fzf` viewer to filter and browse history by keyword, date, or model.
+
+8. **Dynamic Modelfile-Builder & System Prompts**  
+   When launching a model, the TUI asks if you want to use a Custom System Prompt. 
+   - Choose **Launch with Custom System Prompt** to view a menu of **50 professional system prompt templates** (stored in `system_prompts/`) and any custom `.txt` templates you place in **`~/.llmfit/prompts/`**.
+   - If selected, the script writes a temporary `Modelfile` on the fly, compiles an ephemeral custom model (`ephemeral-<model>-<prompt>`) in Ollama, launches the session, and automatically deletes the temporary model and modelfile when you exit.
+
 ---
 
 ## Troubleshooting
