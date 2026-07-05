@@ -1,0 +1,18 @@
+# Agent / developer instructions (NOT for public distribution)
+agents.md
+
+# Editor / OS files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs
+*.log
+
+# Local testing artifacts
+/tmp/

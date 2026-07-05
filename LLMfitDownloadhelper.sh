@@ -163,7 +163,7 @@ echo -e "${BLUE}================================================================
 # 1. Database update with extended model list
 info "Updating llmfit database (extended model list) …"
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
-llmfit update --limit "${LLMFIT_LIMIT}"
+llmfit update --trending "${LLMFIT_LIMIT}"
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 echo ""
 

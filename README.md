@@ -228,7 +228,7 @@ The following variables can be set to customize behavior:
 | Variable         | Default                 | Description                            |
 |------------------|-------------------------|----------------------------------------|
 | `OLLAMA_HOST`    | `http://127.0.0.1:11434`| Ollama API endpoint                    |
-| `LLMFIT_LIMIT`   | `500`                   | Number of models to fetch from HuggingFace |
+| `LLMFIT_LIMIT`   | `500`                   | Trending models to fetch / max fit results |
 
 Example:
 
