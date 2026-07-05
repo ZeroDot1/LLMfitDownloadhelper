@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       1.7
+# Version:       1.8
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #

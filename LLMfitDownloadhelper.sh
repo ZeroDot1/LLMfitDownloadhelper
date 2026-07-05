@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       1.7
+# Version:       1.8
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -19,7 +19,7 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # Configuration (all overridable via environment variables)
 # ------------------------------------------------------------------------------
-VERSION="1.7"
+VERSION="1.8"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
 LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
