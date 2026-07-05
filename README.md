@@ -133,12 +133,13 @@ cargo install llmfit
    ```
 
 The script will:
-1. Update the `llmfit` model cache (500+ models).
-2. Present a sorting menu (newest, context size, best fit, speed).
-3. Analyze your hardware and build a compatibility matrix.
-4. Launch an interactive `fzf` search window pre-filtered for Ollama models.
-5. On selection, start the Ollama daemon automatically (if needed).
-6. Pull and run the chosen model with `ollama run`.
+1. Update the `llmfit` model cache (500+ trending models).
+2. Present a sorting menu with **8 criteria** (date, context, score, speed, params, memory, use case, provider).
+3. Apply optional filters: `--perfect` (exact hardware match) and `--tool-use` (function-calling models only).
+4. Analyze your hardware and build a compatibility matrix.
+5. Launch an interactive `fzf` search window pre-filtered for Ollama models.
+6. On selection, start the Ollama daemon automatically (if needed).
+7. Pull and run the chosen model with `ollama run`.
 
 ---
 
@@ -149,12 +150,14 @@ The script will:
    **500+ trending models**.
 
 2. **Sorting Choice**  
-   You pick how models are sorted: newest release, largest context window, best fit score, or
-   fastest speed.
+   You pick how models are sorted — **8 criteria** available:
+   release date, context window, composite score, tokens/second,
+   parameter count, memory utilization, use case, or provider.
 
 3. **Matrix Calculation**  
    Based on your choice, `llmfit` builds a hardware compatibility matrix covering VRAM footprint,
-   token speed, and context window size.
+   token speed, and context window size. Optional flags (`--perfect`, `--tool-use`) refine the
+   results further.
 
 4. **Interactive Search**  
    The TUI populates a list pre-filtered for `ollama`. Type any keyword (e.g., `llama3`, `qwen`,
@@ -225,15 +228,22 @@ Make sure your terminal supports ANSI escape codes and Unicode. Most modern term
 
 The following variables can be set to customize behavior:
 
-| Variable         | Default                 | Description                            |
-|------------------|-------------------------|----------------------------------------|
-| `OLLAMA_HOST`    | `http://127.0.0.1:11434`| Ollama API endpoint                    |
-| `LLMFIT_LIMIT`   | `500`                   | Trending models to fetch / max fit results |
+| Variable            | Default                 | Description                                    |
+|---------------------|-------------------------|------------------------------------------------|
+| `OLLAMA_HOST`       | `http://127.0.0.1:11434`| Ollama API endpoint                            |
+| `LLMFIT_LIMIT`      | `500`                   | Trending models to fetch / max fit results     |
+| `LLMFIT_PERFECT`    | `false`                 | Show only perfectly matching models (`true`)   |
+| `LLMFIT_TOOL_USE`   | `false`                 | Show only function-calling models (`true`)     |
+| `LLMFIT_NO_DASHBOARD` | `true`                | Disable llmfit background dashboard            |
+| `LLMFIT_MEMORY`     | *(unset)*               | Override GPU VRAM (e.g. `"32G"`, `"32000M"`)   |
+| `LLMFIT_RAM`        | *(unset)*               | Override system RAM (e.g. `"64G"`, `"128000M"`)|
+| `LLMFIT_CPU_CORES`  | *(unset)*               | Override detected CPU core count               |
+| `LLMFIT_MAX_CONTEXT`| *(unset)*               | Cap context length for memory estimation (tokens) |
 
 Example:
 
 ```bash
-OLLAMA_HOST="http://10.0.0.5:11434" LLMFIT_LIMIT=1000 ./LLMfitDownloadhelper.sh
+LLMFIT_PERFECT=true LLMFIT_MEMORY="24G" LLMFIT_LIMIT=1000 ./LLMfitDownloadhelper.sh
 ```
 
 ---

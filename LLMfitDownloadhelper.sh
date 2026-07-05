@@ -2,7 +2,7 @@
 # ==============================================================================
 # Application:   LLMfitDownloadhelper
 # Author:        ZeroDot1
-# Version:       1.6
+# Version:       1.7
 # Platform:      Universal (Arch Linux & Ubuntu compatible)
 # License:       GNU AGPLv3 (https://gnu.org)
 #
@@ -17,11 +17,18 @@
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# Configuration
+# Configuration (all overridable via environment variables)
 # ------------------------------------------------------------------------------
-VERSION="1.6"
+VERSION="1.7"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-500}"
+LLMFIT_PERFECT="${LLMFIT_PERFECT:-false}"
+LLMFIT_TOOL_USE="${LLMFIT_TOOL_USE:-false}"
+LLMFIT_NO_DASHBOARD="${LLMFIT_NO_DASHBOARD:-true}"
+LLMFIT_MEMORY="${LLMFIT_MEMORY:-}"
+LLMFIT_RAM="${LLMFIT_RAM:-}"
+LLMFIT_CPU_CORES="${LLMFIT_CPU_CORES:-}"
+LLMFIT_MAX_CONTEXT="${LLMFIT_MAX_CONTEXT:-}"
 
 # ------------------------------------------------------------------------------
 # TUI Color Palette
@@ -59,6 +66,35 @@ cleanup() {
     true
 }
 trap cleanup EXIT
+
+# ------------------------------------------------------------------------------
+# Build extra CLI arguments from environment variables
+# ------------------------------------------------------------------------------
+build_llmfit_args() {
+    local args=()
+    args+=(--no-dashboard)
+
+    if [[ "${LLMFIT_PERFECT}" == "true" ]]; then
+        args+=(--perfect)
+    fi
+    if [[ "${LLMFIT_TOOL_USE}" == "true" ]]; then
+        args+=(--tool-use)
+    fi
+    if [[ -n "${LLMFIT_MEMORY}" ]]; then
+        args+=(--memory "${LLMFIT_MEMORY}")
+    fi
+    if [[ -n "${LLMFIT_RAM}" ]]; then
+        args+=(--ram "${LLMFIT_RAM}")
+    fi
+    if [[ -n "${LLMFIT_CPU_CORES}" ]]; then
+        args+=(--cpu-cores "${LLMFIT_CPU_CORES}")
+    fi
+    if [[ -n "${LLMFIT_MAX_CONTEXT}" ]]; then
+        args+=(--max-context "${LLMFIT_MAX_CONTEXT}")
+    fi
+
+    echo "${args[@]}"
+}
 
 # ------------------------------------------------------------------------------
 # Preflight checks
@@ -163,19 +199,25 @@ echo -e "${BLUE}================================================================
 # 1. Database update with extended model list
 info "Updating llmfit database (extended model list) …"
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
-llmfit update --trending "${LLMFIT_LIMIT}"
+LLMFIT_ARGS="$(build_llmfit_args)"
+# shellcheck disable=SC2086
+llmfit update --trending "${LLMFIT_LIMIT}" ${LLMFIT_ARGS}
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 echo ""
 
 # 2. Sorting selection menu
 echo -e "${BOLD}${CYAN}Select your preferred sorting criteria:${NC}"
-echo -e " [1] Newest models first (by release date)"
-echo -e " [2] Largest text output first (by context window)"
-echo -e " [3] Recommended best fit (by system score)"
-echo -e " [4] Maximum speed (by tokens/second)"
-echo -e " [5] Quit"
+echo -e " [1] Newest models first        (by release date)"
+echo -e " [2] Largest context window     (by context length)"
+echo -e " [3] Recommended best fit       (by composite score)"
+echo -e " [4] Maximum speed              (by tokens/second)"
+echo -e " [5] Most parameters            (by parameter count)"
+echo -e " [6] Lowest memory usage        (by memory utilization)"
+echo -e " [7] Grouped by use case"
+echo -e " [8] Grouped by model provider"
+echo -e " [9] Quit"
 echo ""
-echo -n "Choice [1-5]: "
+echo -n "Choice [1-9]: "
 read -r CHOICE
 
 SORT_CRITERIA="score"
@@ -198,7 +240,23 @@ case "${CHOICE}" in
         SORT_CRITERIA="tps"
         HEADER_MSG="Sorted by speed (tokens/s first) | Full matrix"
         ;;
-    5|*)
+    5)
+        SORT_CRITERIA="params"
+        HEADER_MSG="Sorted by parameter count (largest first) | Full matrix"
+        ;;
+    6)
+        SORT_CRITERIA="mem"
+        HEADER_MSG="Sorted by memory utilization (lowest first) | Full matrix"
+        ;;
+    7)
+        SORT_CRITERIA="use"
+        HEADER_MSG="Grouped by use case | Full matrix"
+        ;;
+    8)
+        SORT_CRITERIA="provider"
+        HEADER_MSG="Grouped by model provider | Full matrix"
+        ;;
+    9|*)
         echo -e "\n${YELLOW}Exiting application.${NC}"
         exit 0
         ;;
@@ -208,7 +266,8 @@ echo ""
 info "Analyzing local hardware and generating matrix …"
 
 # 3. llmfit query with hardware auto-detection and user sorting
-MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --cli --limit "${LLMFIT_LIMIT}" 2>/dev/null || true)"
+# shellcheck disable=SC2086
+MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --cli --limit "${LLMFIT_LIMIT}" ${LLMFIT_ARGS} 2>/dev/null || true)"
 
 if [[ -z "${MODEL_DATA}" ]]; then
     warn "No optimal matrix found. Loading system fit list …"
