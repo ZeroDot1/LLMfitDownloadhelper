@@ -1075,7 +1075,7 @@ while true; do
         fi
         local free_space_kb
         free_space_kb=$(df -k "${check_dir}" | tail -1 | awk '{print $4}')
-        local free_space_gb=$&lpar;&lpar; free_space_kb / 1024 / 1024 &rpar;&rpar;
+        local free_space_gb=$(( free_space_kb / 1024 / 1024 ))
         
         local space_ok
         space_ok=$(awk "BEGIN {print (${free_space_gb} >= ${total_required_gb}) ? 1 : 0}")
