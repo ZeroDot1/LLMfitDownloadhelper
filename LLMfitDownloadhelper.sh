@@ -1022,18 +1022,18 @@ while true; do
     fi
 
     # 4. Extract model identifiers from selected table rows
-    local model_names=()
-    local base_names=()
+    model_names=()
+    base_names=()
     while read -r line; do
         if [[ -n "${line}" ]]; then
-            local mname
+            mname=""
             mname="$(echo "${line}" | grep -oP '(?<=\│)[^│]+(?=\│)' | sed -n '2p' | xargs 2>/dev/null || true)"
             mname="$(echo "${mname}" | sed 's/[^a-zA-Z0-9:._/-]//g' | awk '{print $1}')"
             if [[ -n "${mname}" ]]; then
                 base_names+=("${mname}")
                 # Translate model name to GGUF source repository if mapped
                 if [[ -f "/tmp/llmfit_model_mapping.json" ]]; then
-                    local mapped
+                    mapped=""
                     mapped="$(jq -r --arg name "${mname}" '.[$name] // empty' /tmp/llmfit_model_mapping.json 2>/dev/null || true)"
                     if [[ -n "${mapped}" ]]; then
                         mname="${mapped}"
@@ -1062,26 +1062,26 @@ while true; do
 
     # Check free disk space before pulling
     if [[ -f "/tmp/llmfit_model_sizes.json" ]]; then
-        local total_required_gb=0
+        total_required_gb=0
         for bname in "${base_names[@]}"; do
-            local req_gb
+            req_gb=""
             req_gb="$(jq -r --arg name "${bname}" '.[$name] // 4.0' /tmp/llmfit_model_sizes.json 2>/dev/null || echo "4.0")"
             total_required_gb=$(awk "BEGIN {print ${total_required_gb} + ${req_gb}}")
         done
         
-        local check_dir="${HOME}"
+        check_dir="${HOME}"
         if [[ -d "${HOME}/.ollama" ]]; then
             check_dir="${HOME}/.ollama"
         fi
-        local free_space_kb
+        free_space_kb=""
         free_space_kb=$(df -k "${check_dir}" | tail -1 | awk '{print $4}')
-        local free_space_gb=$(( free_space_kb / 1024 / 1024 ))
+        free_space_gb=$(( free_space_kb / 1024 / 1024 ))
         
-        local space_ok
+        space_ok=""
         space_ok=$(awk "BEGIN {print (${free_space_gb} >= ${total_required_gb}) ? 1 : 0}")
         if [[ "${space_ok}" -eq 0 ]]; then
             warn "Low disk space! The selected model(s) require approximately ${total_required_gb} GB, but you only have ${free_space_gb} GB free on ${check_dir}."
-            local disk_confirm
+            disk_confirm=""
             disk_confirm=$(echo -e "No, cancel\nYes, proceed anyway" | fzf \
                 --header="Do you want to proceed despite low disk space?" \
                 --prompt="Low disk space > " \
@@ -1107,7 +1107,7 @@ while true; do
         echo ""
         
         info "Ensuring model ${model_names[0]} is pulled …"
-        local pull_status=0
+        pull_status=0
         ollama pull "${model_names[0]}" || pull_status=$?
         if [[ ${pull_status} -eq 0 ]]; then
             log_history "PULLED" "${model_names[0]}"
@@ -1128,10 +1128,10 @@ while true; do
         echo -e "${BLUE}======================================================================${NC}"
         echo ""
         
-        local success_count=0
+        success_count=0
         for mname in "${model_names[@]}"; do
             info "Pulling model ${mname} …"
-            local pull_status=0
+            pull_status=0
             ollama pull "${mname}" || pull_status=$?
             if [[ ${pull_status} -eq 0 ]]; then
                 success_count=$((success_count + 1))
@@ -1146,7 +1146,7 @@ while true; do
         success "Batch download finished. Successfully pulled ${success_count} / ${#model_names[@]} models."
         echo ""
         
-        local run_choice
+        run_choice=""
         run_choice=$(echo -e "Yes, run now\nNo, cancel" | fzf \
             --header="Would you like to start inference for the first model (${model_names[0]})?" \
             --prompt="Start inference? > " \
