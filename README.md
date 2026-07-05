@@ -252,6 +252,19 @@ Make sure your terminal supports ANSI escape codes and Unicode. Most modern term
 
 ---
 
+## Command Line Options
+
+You can launch the script with various flags:
+
+| Option | Argument | Description |
+|--------|----------|-------------|
+| `-c`, `--clean`, `--manage` | *None* | Directly open the installed models manager (Ollama-Aufräumer) and exit |
+| `-t`, `--tag` | `coding`, `vision`, `reasoning`, `audio`, `general` | Pre-filter TUI models by tag/category |
+| `--update` | *None* | Check for updates on GitHub and self-update the script and helpers |
+| `-h`, `--help` | *None* | Show the help message and exit |
+
+---
+
 ## Environment Variables
 
 The following variables can be set to customize behavior:
