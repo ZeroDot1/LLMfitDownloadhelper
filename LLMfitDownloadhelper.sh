@@ -59,9 +59,33 @@ BOLD='\033[1m'
 # ------------------------------------------------------------------------------
 # Helper functions
 # ------------------------------------------------------------------------------
+log_history() {
+    local event_type="$1"
+    local model_name="$2"
+    local extra_info="${3:-}"
+    mkdir -p "${HOME}/.llmfit"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') | ${event_type} | ${model_name} ${extra_info}" >> "${HOME}/.llmfit/download_history.log"
+}
+
 error_exit() {
     echo -e "${RED}${BOLD}Error:${NC} $*" >&2
     exit 1
+}
+
+view_history_log() {
+    local log_file="${HOME}/.llmfit/download_history.log"
+    if [[ ! -f "${log_file}" ]]; then
+        info "No download or run history log found yet."
+        sleep 1.5
+        return
+    fi
+    
+    # View via fzf
+    fzf --header="Download & Run History (ESC to exit)" \
+        --prompt="Search log > " \
+        --border=rounded \
+        --height=70% \
+        --layout=reverse < "${log_file}" || true
 }
 
 info() {
@@ -719,9 +743,10 @@ while true; do
         echo -e " [9] Manage installed models"
         echo -e " [10] Filter by tag / category   (Current: ${LLMFIT_TAG_FILTER:-None})"
         echo -e " [11] Force update model database (all models)"
-        echo -e " [12] Quit"
+        echo -e " [12] View download & run history"
+        echo -e " [13] Quit"
         echo ""
-        echo -n "Choice [1-12]: "
+        echo -n "Choice [1-13]: "
         read -r CHOICE
     fi
 
@@ -773,7 +798,11 @@ while true; do
             update_database_if_old true
             continue
             ;;
-        12|*)
+        12)
+            view_history_log
+            continue
+            ;;
+        13|*)
             echo -e "\n${YELLOW}Exiting application.${NC}"
             exit 0
             ;;
@@ -936,9 +965,31 @@ while true; do
         echo -e "${BLUE}======================================================================${NC}"
         echo ""
         
+        info "Ensuring model ${model_names[0]} is pulled …"
+        local pull_status=0
+        ollama pull "${model_names[0]}" || pull_status=$?
+        if [[ ${pull_status} -eq 0 ]]; then
+            log_history "PULLED" "${model_names[0]}"
+        else
+            log_history "PULL_FAILED" "${model_names[0]}" "| Exit code: ${pull_status}"
+            warn "Failed to pull ${model_names[0]}. Ollama exited with code ${pull_status}."
+            echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
+            read -r _
+            continue
+        fi
+
+        local start_time
+        start_time=$(date +%s)
         local run_status=0
         ollama run "${model_names[0]}" || run_status=$?
-        if [[ ${run_status} -ne 0 ]]; then
+        local end_time
+        end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        
+        if [[ ${run_status} -eq 0 ]]; then
+            log_history "RUN" "${model_names[0]}" "| Duration: ${duration}s"
+        else
+            log_history "RUN_FAILED" "${model_names[0]}" "| Exit code: ${run_status} | Duration: ${duration}s"
             warn "Ollama run exited with error code ${run_status}."
             echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
             read -r _
@@ -958,7 +1009,9 @@ while true; do
             ollama pull "${mname}" || pull_status=$?
             if [[ ${pull_status} -eq 0 ]]; then
                 success_count=$((success_count + 1))
+                log_history "PULLED" "${mname}"
             else
+                log_history "PULL_FAILED" "${mname}" "| Exit code: ${pull_status}"
                 warn "Failed to pull ${mname}. Ollama exited with code ${pull_status}."
             fi
             echo ""
@@ -976,9 +1029,18 @@ while true; do
             --layout=reverse)
             
         if [[ "${run_choice}" == "Yes, run now" ]]; then
+            local start_time
+            start_time=$(date +%s)
             local run_status=0
             ollama run "${model_names[0]}" || run_status=$?
-            if [[ ${run_status} -ne 0 ]]; then
+            local end_time
+            end_time=$(date +%s)
+            local duration=$((end_time - start_time))
+            
+            if [[ ${run_status} -eq 0 ]]; then
+                log_history "RUN" "${model_names[0]}" "| Duration: ${duration}s"
+            else
+                log_history "RUN_FAILED" "${model_names[0]}" "| Exit code: ${run_status} | Duration: ${duration}s"
                 warn "Ollama run exited with error code ${run_status}."
                 echo -e "${YELLOW}Press ENTER to return to menu...${NC}"
                 read -r _
