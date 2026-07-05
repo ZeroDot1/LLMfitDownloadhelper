@@ -19,6 +19,20 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # Configuration (all overridable via environment variables)
 # ------------------------------------------------------------------------------
+# Load HuggingFace token and other custom environment configs if present
+if [[ -f "${HOME}/.llmfit/.env" ]]; then
+    # shellcheck disable=SC1090
+    source "${HOME}/.llmfit/.env"
+fi
+SCRIPT_DIR_INIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR_INIT}/.env" ]]; then
+    # shellcheck disable=SC1090
+    source "${SCRIPT_DIR_INIT}/.env"
+fi
+if [[ -n "${HF_TOKEN:-}" ]]; then
+    export HF_TOKEN
+fi
+
 VERSION="2.0"
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 LLMFIT_LIMIT="${LLMFIT_LIMIT:-10000}"
@@ -29,6 +43,7 @@ LLMFIT_MEMORY="${LLMFIT_MEMORY:-}"
 LLMFIT_RAM="${LLMFIT_RAM:-}"
 LLMFIT_CPU_CORES="${LLMFIT_CPU_CORES:-}"
 LLMFIT_MAX_CONTEXT="${LLMFIT_MAX_CONTEXT:-}"
+LLMFIT_OFFLINE="${LLMFIT_OFFLINE:-false}"
 
 # ------------------------------------------------------------------------------
 # TUI Color Palette
@@ -397,6 +412,10 @@ select_tag_filter() {
 # Self-update function
 # ------------------------------------------------------------------------------
 self_update() {
+    if [[ "${LLMFIT_OFFLINE}" == "true" ]]; then
+        info "Offline mode active. Skipping self-update."
+        exit 0
+    fi
     local script_dir
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     
@@ -547,6 +566,41 @@ while [[ $# -gt 0 ]]; do
             LLMFIT_TAG_FILTER="$2"
             shift 2
             ;;
+        -o|--offline)
+            LLMFIT_OFFLINE=true
+            shift
+            ;;
+        --show-widget)
+            local script_path
+            script_path=$(realpath "$0")
+            echo '# Add this function to your ~/.bashrc or ~/.zshrc for Alt+L quick model launcher:'
+            echo 'llmfit-widget() {'
+            echo '  local model'
+            echo "  model=\$(\"${script_path}\" --widget-mode)"
+            echo '  if [[ -n "${model}" ]]; then'
+            echo '    # If in zsh'
+            echo '    if [[ -n "${ZSH_VERSION:-}" ]]; then'
+            echo '      BUFFER="ollama run ${model}"'
+            echo '      zle accept-line'
+            echo '    else'
+            echo '      # Bash fallback'
+            echo '      READLINE_LINE="ollama run ${model}"'
+            echo '      READLINE_POINT=${#READLINE_LINE}'
+            echo '    fi'
+            echo '  fi'
+            echo '}'
+            echo 'if [[ -n "${ZSH_VERSION:-}" ]]; then'
+            echo '  zle -N llmfit-widget'
+            echo '  bindkey "^[l" llmfit-widget'
+            echo 'else'
+            echo '  bind -x "\"\eL\": llmfit-widget"'
+            echo 'fi'
+            exit 0
+            ;;
+        --widget-mode)
+            PARSE_WIDGET_MODE=true
+            shift
+            ;;
         --update)
             PARSE_UPDATE=true
             shift
@@ -558,6 +612,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -c, --clean, --manage   Directly open the installed models manager (Ollama-Aufräumer)"
             echo "  -t, --tag <tag>         Pre-filter TUI models by tag (coding, vision, reasoning, audio, general)"
+            echo "  -o, --offline           Run in offline mode (skips self-updates and database check updates)"
+            echo "  --show-widget           Output Alt+L widget snippet for ~/.bashrc or ~/.zshrc"
             echo "  --update                Check for updates on GitHub and self-update"
             echo "  -h, --help              Show this help message"
             exit 0
@@ -581,6 +637,10 @@ fi
 # Database update helper (checks cache age or force updates all models)
 # ------------------------------------------------------------------------------
 update_database_if_old() {
+    if [[ "${LLMFIT_OFFLINE}" == "true" ]]; then
+        info "Offline mode active. Skipping database update checks."
+        return
+    fi
     local force="${1:-false}"
     local cache_file="${HOME}/.llmfit/hf_models_cache.json"
     local now
@@ -643,22 +703,27 @@ echo ""
 # Main menu loop: menu → fit → fzf → (run model | back | quit)
 # ------------------------------------------------------------------------------
 while true; do
-    echo -e "${BOLD}${CYAN}Select your preferred sorting criteria:${NC}"
-    echo -e " [1] Newest models first        (by release date)"
-    echo -e " [2] Largest context window     (by context length)"
-    echo -e " [3] Recommended best fit       (by composite score)"
-    echo -e " [4] Maximum speed              (by tokens/second)"
-    echo -e " [5] Most parameters            (by parameter count)"
-    echo -e " [6] Lowest memory usage        (by memory utilization)"
-    echo -e " [7] Grouped by use case"
-    echo -e " [8] Grouped by model provider"
-    echo -e " [9] Manage installed models"
-    echo -e " [10] Filter by tag / category   (Current: ${LLMFIT_TAG_FILTER:-None})"
-    echo -e " [11] Force update model database (all models)"
-    echo -e " [12] Quit"
-    echo ""
-    echo -n "Choice [1-12]: "
-    read -r CHOICE
+    CHOICE=""
+    if [[ "${PARSE_WIDGET_MODE:-false}" == "true" ]]; then
+        CHOICE=3
+    else
+        echo -e "${BOLD}${CYAN}Select your preferred sorting criteria:${NC}"
+        echo -e " [1] Newest models first        (by release date)"
+        echo -e " [2] Largest context window     (by context length)"
+        echo -e " [3] Recommended best fit       (by composite score)"
+        echo -e " [4] Maximum speed              (by tokens/second)"
+        echo -e " [5] Most parameters            (by parameter count)"
+        echo -e " [6] Lowest memory usage        (by memory utilization)"
+        echo -e " [7] Grouped by use case"
+        echo -e " [8] Grouped by model provider"
+        echo -e " [9] Manage installed models"
+        echo -e " [10] Filter by tag / category   (Current: ${LLMFIT_TAG_FILTER:-None})"
+        echo -e " [11] Force update model database (all models)"
+        echo -e " [12] Quit"
+        echo ""
+        echo -n "Choice [1-12]: "
+        read -r CHOICE
+    fi
 
     SORT_CRITERIA="score"
     HEADER_MSG="Auto-Detected Hardware Fit"
@@ -777,8 +842,11 @@ while true; do
     EXPECTED_KEY="$(echo "${RESULT}" | head -1)"
     SELECTED_LINE="$(echo "${RESULT}" | tail -n +2)"
 
-    # [b] pressed → back to menu
+    # [b] pressed → back to menu (or exit in widget mode)
     if [[ "${EXPECTED_KEY}" == "b" ]] || [[ -z "${EXPECTED_KEY}" && -z "${SELECTED_LINE}" ]]; then
+        if [[ "${PARSE_WIDGET_MODE:-false}" == "true" ]]; then
+            exit 0
+        fi
         echo ""
         continue
     fi
@@ -814,6 +882,12 @@ while true; do
         warn "Could not extract any valid model identifiers. Press ENTER to retry."
         read -r
         continue
+    fi
+
+    # Widget mode check
+    if [[ "${PARSE_WIDGET_MODE:-false}" == "true" ]]; then
+        echo "${model_names[0]}"
+        exit 0
     fi
 
     # Check free disk space before pulling
