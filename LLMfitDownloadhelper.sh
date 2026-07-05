@@ -328,17 +328,13 @@ while true; do
         continue
     fi
 
-    # 4. Extract model identifier from table row
-    MODEL_NAME="$(echo "${SELECTED_LINE}" | awk -F'│' '{print $2}' | xargs 2>/dev/null || true)"
+    # 4. Extract model identifier from table row (column 2 between │ chars)
+    MODEL_NAME="$(echo "${SELECTED_LINE}" | grep -oP '(?<=\│)[^│]+(?=\│)' | sed -n '2p' | xargs 2>/dev/null || true)"
 
-    if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
-        MODEL_NAME="$(echo "${SELECTED_LINE}" | awk '{print $1}' | sed 's/│//g' | xargs)"
-    fi
+    # Only allow alphanumeric characters, colons, dots, slashes, underscores, and hyphens
+    MODEL_NAME="$(echo "${MODEL_NAME}" | sed 's/[^a-zA-Z0-9:._/-]//g' | awk '{print $1}')"
 
-    # Only allow alphanumeric characters, colons, dots, underscores, and hyphens
-    MODEL_NAME="$(echo "${MODEL_NAME}" | sed 's/[^a-zA-Z0-9:._-]//g' | awk '{print $1}')"
-
-    if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
+    if [[ -z "${MODEL_NAME}" ]]; then
         warn "Could not extract a valid model identifier. Press ENTER to retry."
         read -r
         continue
