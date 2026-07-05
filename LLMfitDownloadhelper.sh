@@ -990,7 +990,7 @@ while true; do
         --multi \
         -d '│' \
         --expect=b \
-        --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG} | Tab: Select | Ctrl-S: Cycle Sort" \
+        --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG} | Tab: Select | Ctrl-S: Cycle | Enter: Run | b: Back | ESC: Quit" \
         --prompt="Search model > " \
         --border=rounded \
         --height=80% \
