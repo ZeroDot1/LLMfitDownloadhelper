@@ -203,7 +203,7 @@ echo -e "${BLUE}================================================================
 echo -e "${BOLD}${CYAN}  LLMfitDownloadhelper ${NC}v${VERSION} | ${GREEN}Author: ZeroDot1${NC}"
 echo -e "${BLUE}======================================================================${NC}"
 
-# 1. Database update with extended model list
+# 1. Database update with extended model list (once on launch)
 info "Updating llmfit database (extended model list) …"
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 GLOBAL_ARGS="$(build_global_args)"
@@ -212,121 +212,146 @@ llmfit update --trending "${LLMFIT_LIMIT}" ${GLOBAL_ARGS}
 echo -e "${BLUE}----------------------------------------------------------------------${NC}"
 echo ""
 
-# 2. Sorting selection menu
-echo -e "${BOLD}${CYAN}Select your preferred sorting criteria:${NC}"
-echo -e " [1] Newest models first        (by release date)"
-echo -e " [2] Largest context window     (by context length)"
-echo -e " [3] Recommended best fit       (by composite score)"
-echo -e " [4] Maximum speed              (by tokens/second)"
-echo -e " [5] Most parameters            (by parameter count)"
-echo -e " [6] Lowest memory usage        (by memory utilization)"
-echo -e " [7] Grouped by use case"
-echo -e " [8] Grouped by model provider"
-echo -e " [9] Quit"
-echo ""
-echo -n "Choice [1-9]: "
-read -r CHOICE
+# ------------------------------------------------------------------------------
+# Main menu loop: menu → fit → fzf → (run model | back | quit)
+# ------------------------------------------------------------------------------
+while true; do
+    echo -e "${BOLD}${CYAN}Select your preferred sorting criteria:${NC}"
+    echo -e " [1] Newest models first        (by release date)"
+    echo -e " [2] Largest context window     (by context length)"
+    echo -e " [3] Recommended best fit       (by composite score)"
+    echo -e " [4] Maximum speed              (by tokens/second)"
+    echo -e " [5] Most parameters            (by parameter count)"
+    echo -e " [6] Lowest memory usage        (by memory utilization)"
+    echo -e " [7] Grouped by use case"
+    echo -e " [8] Grouped by model provider"
+    echo -e " [9] Quit"
+    echo ""
+    echo -n "Choice [1-9]: "
+    read -r CHOICE
 
-SORT_CRITERIA="score"
-HEADER_MSG="Auto-Detected Hardware Fit"
+    SORT_CRITERIA="score"
+    HEADER_MSG="Auto-Detected Hardware Fit"
 
-case "${CHOICE}" in
-    1)
-        SORT_CRITERIA="date"
-        HEADER_MSG="Sorted by date (newest first) | Full matrix"
-        ;;
-    2)
-        SORT_CRITERIA="ctx"
-        HEADER_MSG="Sorted by context window (largest first) | Full matrix"
-        ;;
-    3)
-        SORT_CRITERIA="score"
-        HEADER_MSG="Sorted by system score (best fit first) | Full matrix"
-        ;;
-    4)
-        SORT_CRITERIA="tps"
-        HEADER_MSG="Sorted by speed (tokens/s first) | Full matrix"
-        ;;
-    5)
-        SORT_CRITERIA="params"
-        HEADER_MSG="Sorted by parameter count (largest first) | Full matrix"
-        ;;
-    6)
-        SORT_CRITERIA="mem"
-        HEADER_MSG="Sorted by memory utilization (lowest first) | Full matrix"
-        ;;
-    7)
-        SORT_CRITERIA="use"
-        HEADER_MSG="Grouped by use case | Full matrix"
-        ;;
-    8)
-        SORT_CRITERIA="provider"
-        HEADER_MSG="Grouped by model provider | Full matrix"
-        ;;
-    9|*)
+    case "${CHOICE}" in
+        1)
+            SORT_CRITERIA="date"
+            HEADER_MSG="Sorted by date (newest first)"
+            ;;
+        2)
+            SORT_CRITERIA="ctx"
+            HEADER_MSG="Sorted by context window (largest first)"
+            ;;
+        3)
+            SORT_CRITERIA="score"
+            HEADER_MSG="Sorted by system score (best fit first)"
+            ;;
+        4)
+            SORT_CRITERIA="tps"
+            HEADER_MSG="Sorted by speed (tok/s first)"
+            ;;
+        5)
+            SORT_CRITERIA="params"
+            HEADER_MSG="Sorted by parameter count (largest first)"
+            ;;
+        6)
+            SORT_CRITERIA="mem"
+            HEADER_MSG="Sorted by memory utilization (lowest first)"
+            ;;
+        7)
+            SORT_CRITERIA="use"
+            HEADER_MSG="Grouped by use case"
+            ;;
+        8)
+            SORT_CRITERIA="provider"
+            HEADER_MSG="Grouped by model provider"
+            ;;
+        9|*)
+            echo -e "\n${YELLOW}Exiting application.${NC}"
+            exit 0
+            ;;
+    esac
+
+    echo ""
+    info "Analyzing local hardware and generating matrix …"
+
+    # 2. llmfit query with hardware auto-detection and user sorting
+    FIT_ARGS="$(build_fit_args)"
+    # shellcheck disable=SC2086
+    MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null || true)"
+
+    if [[ -z "${MODEL_DATA}" ]]; then
+        warn "No optimal matrix found. Loading system fit list …"
+        MODEL_DATA="$(llmfit list 2>/dev/null || true)"
+    fi
+
+    if [[ -z "${MODEL_DATA}" ]]; then
+        warn "llmfit could not determine hardware metrics."
+        echo -e "${YELLOW}Press ENTER to try again or type 'q' to quit:${NC} "
+        read -r RETRY
+        [[ "${RETRY}" == "q" ]] && exit 0
+        continue
+    fi
+
+    # 3. Interactive TUI with fzf — press [b] to go back
+    echo ""
+    success "Arrow keys to navigate, [ENTER] to download & start"
+    echo -e "  ${BLUE}[b]${NC} back to menu  |  ${BLUE}[ESC]${NC} quit"
+    echo ""
+
+    RESULT="$(echo "${MODEL_DATA}" | fzf \
+        --ansi \
+        --no-sort \
+        --expect=b \
+        --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG}" \
+        --prompt="Search model > " \
+        --border=rounded \
+        --height=75% \
+        --layout=reverse \
+        --query="ollama")"
+
+    FZF_EXIT=$?
+
+    # Esc / Ctrl-C — quit
+    if [[ ${FZF_EXIT} -ne 0 ]]; then
         echo -e "\n${YELLOW}Exiting application.${NC}"
         exit 0
-        ;;
-esac
+    fi
 
-echo ""
-info "Analyzing local hardware and generating matrix …"
+    # --expect prints the pressed key on line 1, the selected line on line 2
+    EXPECTED_KEY="$(echo "${RESULT}" | head -1)"
+    SELECTED_LINE="$(echo "${RESULT}" | tail -1)"
 
-# 3. llmfit query with hardware auto-detection and user sorting
-# shellcheck disable=SC2086
-FIT_ARGS="$(build_fit_args)"
-# shellcheck disable=SC2086
-MODEL_DATA="$(llmfit fit --sort "${SORT_CRITERIA}" --limit "${LLMFIT_LIMIT}" ${GLOBAL_ARGS} ${FIT_ARGS} 2>/dev/null || true)"
+    # [b] pressed → back to menu
+    if [[ "${EXPECTED_KEY}" == "b" ]] || [[ -z "${EXPECTED_KEY}" && -z "${SELECTED_LINE}" ]]; then
+        echo ""
+        continue
+    fi
 
-if [[ -z "${MODEL_DATA}" ]]; then
-    warn "No optimal matrix found. Loading system fit list …"
-    MODEL_DATA="$(llmfit list 2>/dev/null || true)"
-fi
+    # 4. Extract model identifier from table row
+    MODEL_NAME="$(echo "${SELECTED_LINE}" | awk -F'│' '{print $2}' | xargs 2>/dev/null || true)"
 
-if [[ -z "${MODEL_DATA}" ]]; then
-    error_exit "llmfit could not determine hardware metrics."
-fi
+    if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
+        MODEL_NAME="$(echo "${SELECTED_LINE}" | awk '{print $1}' | sed 's/│//g' | xargs)"
+    fi
 
-# 4. Interactive TUI with fzf
-success "Arrow keys to navigate, type to filter. [ENTER] to download & start:"
-echo ""
+    # Only allow alphanumeric characters, colons, dots, underscores, and hyphens
+    MODEL_NAME="$(echo "${MODEL_NAME}" | sed 's/[^a-zA-Z0-9:._-]//g' | awk '{print $1}')"
 
-SELECTED_LINE="$(echo "${MODEL_DATA}" | fzf \
-    --ansi \
-    --no-sort \
-    --header="LLMfitDownloadhelper v${VERSION} | ${HEADER_MSG}" \
-    --prompt="Search model > " \
-    --border=rounded \
-    --height=75% \
-    --layout=reverse \
-    --query="ollama")"
+    if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
+        warn "Could not extract a valid model identifier. Press ENTER to retry."
+        read -r
+        continue
+    fi
 
-if [[ -z "${SELECTED_LINE}" ]]; then
-    echo -e "\n${YELLOW}Selection canceled.${NC}"
-    exit 0
-fi
+    # 5. Start ollama (if needed) and pull & run the model
+    ensure_ollama_running
 
-# 5. Extract model identifier from table row
-MODEL_NAME="$(echo "${SELECTED_LINE}" | awk -F'│' '{print $2}' | xargs 2>/dev/null || true)"
+    clear
+    echo -e "${BLUE}======================================================================${NC}"
+    echo -e "${BOLD}${GREEN}  Downloading & starting inference for: ${YELLOW}${MODEL_NAME}${NC}"
+    echo -e "${BLUE}======================================================================${NC}"
+    echo ""
 
-if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
-    MODEL_NAME="$(echo "${SELECTED_LINE}" | awk '{print $1}' | sed 's/│//g' | xargs)"
-fi
-
-# Only allow alphanumeric characters, colons, dots, underscores, and hyphens
-MODEL_NAME="$(echo "${MODEL_NAME}" | sed 's/[^a-zA-Z0-9:._-]//g' | awk '{print $1}')"
-
-if [[ -z "${MODEL_NAME}" || "${MODEL_NAME}" == "Name" ]]; then
-    error_exit "Could not extract a valid model identifier."
-fi
-
-# 6. Start ollama (if needed) and pull & run the model
-ensure_ollama_running
-
-clear
-echo -e "${BLUE}======================================================================${NC}"
-echo -e "${BOLD}${GREEN}  Downloading & starting inference for: ${YELLOW}${MODEL_NAME}${NC}"
-echo -e "${BLUE}======================================================================${NC}"
-echo ""
-
-exec ollama run "${MODEL_NAME}"
+    exec ollama run "${MODEL_NAME}"
+done
