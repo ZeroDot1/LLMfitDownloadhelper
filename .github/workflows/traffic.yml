@@ -12,12 +12,12 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -42,7 +42,7 @@ jobs:
           }
           base_url = f'https://api.github.com/repos/{repo}'
 
-          os.makedirs('traffic', exist_ok=True)
+          os.makedirs('docs', exist_ok=True)
           today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
 
           def load_history(filename):
@@ -61,27 +61,27 @@ jobs:
           # 1. Views abrufen (Seitenaufrufe)
           r = requests.get(f'{base_url}/traffic/views', headers=headers).json()
           if 'views' in r:
-              hist = load_history('traffic/views.json')
-              with open('traffic/views.json', 'w') as f:
+              hist = load_history('docs/views.json')
+              with open('docs/views.json', 'w') as f:
                   json.dump(merge_time_series(hist, r['views']), f, indent=2)
 
           # 2. Clones abrufen (Git-Klone)
           r = requests.get(f'{base_url}/traffic/clones', headers=headers).json()
           if 'clones' in r:
-              hist = load_history('traffic/clones.json')
-              with open('traffic/clones.json', 'w') as f:
+              hist = load_history('docs/clones.json')
+              with open('docs/clones.json', 'w') as f:
                   json.dump(merge_time_series(hist, r['clones']), f, indent=2)
 
           # 3. Referrers abrufen (Top-Verweisquellen)
           r = requests.get(f'{base_url}/traffic/popular/referrers', headers=headers).json()
           if isinstance(r, list):
-              with open('traffic/referrers.json', 'w') as f:
+              with open('docs/referrers.json', 'w') as f:
                   json.dump(r, f, indent=2)
 
           # 4. Paths abrufen (Beliebte Unterseiten)
           r = requests.get(f'{base_url}/traffic/popular/paths', headers=headers).json()
           if isinstance(r, list):
-              with open('traffic/paths.json', 'w') as f:
+              with open('docs/paths.json', 'w') as f:
                   json.dump(r, f, indent=2)
 
           print(f"✅ Traffic-Daten erfolgreich aktualisiert am {today}")
@@ -91,6 +91,6 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add traffic/
+          git add docs/
           git diff-index --quiet HEAD ||           git commit -m "chore: archive traffic analytics for LLMfitDownloadhelper"
           git push
